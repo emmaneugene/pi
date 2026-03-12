@@ -1,0 +1,9 @@
+{
+  "providers": {
+    "github-copilot": {
+      "apiKey": "$COPILOT_GITHUB_TOKEN",
+      "baseUrl": "https://api.individual.githubcopilot.com",
+      "models": []
+    }
+  }
+}

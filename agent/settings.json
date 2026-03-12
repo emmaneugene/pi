@@ -1,0 +1,25 @@
+{
+  "lastChangelogVersion": "0.57.1",
+  "defaultProvider": "github-copilot",
+  "defaultModel": "gpt-5.4",
+  "hideThinkingBlock": false,
+  "defaultThinkingLevel": "medium",
+  "enabledModels": [
+    "anthropic/claude-sonnet-4-6",
+    "anthropic/claude-opus-4-6",
+    "github-copilot/claude-opus-4.6",
+    "github-copilot/claude-sonnet-4.6",
+    "github-copilot/gpt-5.3-codex",
+    "github-copilot/gemini-3.1-pro-preview",
+    "github-copilot/gpt-5.4",
+    "opencode-go/kimi-k2.5",
+    "opencode-go/glm-5",
+    "opencode-go/minimax-m2.5"
+  ],
+  "skills": [
+    "~/.agents/skills"
+  ],
+  "packages": [
+    "npm:pi-mcp-adapter"
+  ]
+}

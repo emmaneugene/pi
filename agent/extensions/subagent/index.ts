@@ -19,11 +19,13 @@ import * as path from "node:path";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import type { Message } from "@mariozechner/pi-ai";
 import { StringEnum } from "@mariozechner/pi-ai";
-import { type ExtensionAPI, getMarkdownTheme } from "@mariozechner/pi-coding-agent";
+import { type ExtensionAPI, type ExtensionContext, getMarkdownTheme } from "@mariozechner/pi-coding-agent";
 import { Container, Markdown, Spacer, Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.js";
 
+const SUBAGENT_TOOL_NAME = "subagent";
+const SUBAGENT_MODE_ENTRY = "subagent-mode";
 const MAX_PARALLEL_TASKS = 8;
 const MAX_CONCURRENCY = 4;
 const COLLAPSED_ITEM_COUNT = 10;
@@ -246,6 +248,7 @@ async function runSingleAgent(
 
 	const args: string[] = ["--mode", "json", "-p", "--no-session"];
 	if (agent.model) args.push("--model", agent.model);
+	if (agent.thinking) args.push("--thinking", agent.thinking);
 	if (agent.tools && agent.tools.length > 0) args.push("--tools", agent.tools.join(","));
 
 	let tmpPromptDir: string | null = null;
@@ -406,8 +409,60 @@ const SubagentParams = Type.Object({
 });
 
 export default function (pi: ExtensionAPI) {
+	let subagentModeEnabled = false;
+	let baselineTools: string[] | null = null;
+
+	pi.registerFlag("subagents", {
+		description: "Start with subagent mode enabled",
+		type: "boolean",
+		default: false,
+	});
+
+	function getBaselineTools(): string[] {
+		if (baselineTools) return baselineTools;
+		baselineTools = pi.getActiveTools().filter((name) => name !== SUBAGENT_TOOL_NAME);
+		return baselineTools;
+	}
+
+	function updateStatus(ctx: ExtensionContext): void {
+		ctx.ui.setStatus(
+			"subagent-mode",
+			subagentModeEnabled ? ctx.ui.theme.fg("accent", "🤝 subagents") : undefined,
+		);
+	}
+
+	function persistState(): void {
+		pi.appendEntry(SUBAGENT_MODE_ENTRY, { enabled: subagentModeEnabled });
+	}
+
+	function applyToolState(ctx: ExtensionContext): void {
+		const base = getBaselineTools();
+		const nextTools = subagentModeEnabled ? [...new Set([...base, SUBAGENT_TOOL_NAME])] : base;
+		pi.setActiveTools(nextTools);
+		updateStatus(ctx);
+	}
+
+	function setSubagentMode(enabled: boolean, ctx: ExtensionContext): void {
+		subagentModeEnabled = enabled;
+		applyToolState(ctx);
+		persistState();
+		ctx.ui.notify(
+			enabled ? "Subagent mode enabled. Delegation tool available." : "Subagent mode disabled.",
+			"info",
+		);
+	}
+
+	function toggleSubagentMode(ctx: ExtensionContext): void {
+		setSubagentMode(!subagentModeEnabled, ctx);
+	}
+
+	pi.registerCommand("subagents", {
+		description: "Toggle subagent mode",
+		handler: async (_args, ctx) => toggleSubagentMode(ctx),
+	});
+
 	pi.registerTool({
-		name: "subagent",
+		name: SUBAGENT_TOOL_NAME,
 		label: "Subagent",
 		description: [
 			"Delegate tasks to specialized subagents with isolated context.",
@@ -418,6 +473,14 @@ export default function (pi: ExtensionAPI) {
 		parameters: SubagentParams,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
+			if (!subagentModeEnabled) {
+				return {
+					content: [{ type: "text", text: "Subagent mode is disabled. Enable it with /subagents first." }],
+					details: { mode: "single", agentScope: "user", projectAgentsDir: null, results: [] },
+					isError: true,
+				};
+			}
+
 			const agentScope: AgentScope = params.agentScope ?? "user";
 			const discovery = discoverAgents(ctx.cwd, agentScope);
 			const agents = discovery.agents;
@@ -960,5 +1023,21 @@ export default function (pi: ExtensionAPI) {
 			const text = result.content[0];
 			return new Text(text?.type === "text" ? text.text : "(no output)", 0, 0);
 		},
+	});
+
+	pi.on("session_start", async (_event, ctx) => {
+		baselineTools = pi.getActiveTools().filter((name) => name !== SUBAGENT_TOOL_NAME);
+		subagentModeEnabled = pi.getFlag("subagents") === true;
+
+		const modeEntry = ctx.sessionManager
+			.getEntries()
+			.filter((e: { type: string; customType?: string }) => e.type === "custom" && e.customType === SUBAGENT_MODE_ENTRY)
+			.pop() as { data?: { enabled?: boolean } } | undefined;
+
+		if (modeEntry?.data?.enabled !== undefined) {
+			subagentModeEnabled = modeEntry.data.enabled;
+		}
+
+		applyToolState(ctx);
 	});
 }

@@ -7,12 +7,16 @@ import * as path from "node:path";
 import { getAgentDir, parseFrontmatter } from "@mariozechner/pi-coding-agent";
 
 export type AgentScope = "user" | "project" | "both";
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
+const THINKING_LEVELS = new Set<ThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh"]);
 
 export interface AgentConfig {
 	name: string;
 	description: string;
 	tools?: string[];
 	model?: string;
+	thinking?: ThinkingLevel;
 	systemPrompt: string;
 	source: "user" | "project";
 	filePath: string;
@@ -59,12 +63,14 @@ function loadAgentsFromDir(dir: string, source: "user" | "project"): AgentConfig
 			?.split(",")
 			.map((t: string) => t.trim())
 			.filter(Boolean);
+		const thinking = frontmatter.thinking?.trim();
 
 		agents.push({
 			name: frontmatter.name,
 			description: frontmatter.description,
 			tools: tools && tools.length > 0 ? tools : undefined,
 			model: frontmatter.model,
+			thinking: thinking && THINKING_LEVELS.has(thinking as ThinkingLevel) ? (thinking as ThinkingLevel) : undefined,
 			systemPrompt: body,
 			source,
 			filePath,

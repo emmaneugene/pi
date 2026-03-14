@@ -2,6 +2,8 @@
 
 Delegates work to specialized subagents by spawning separate `pi` subprocesses with isolated context.
 
+The `subagent` tool is disabled by default and becomes available only when subagent mode is enabled.
+
 ## Files
 
 - `agent/extensions/subagent/index.ts` — extension entrypoint
@@ -33,16 +35,35 @@ name: scout
 description: Fast codebase recon
 tools: read, grep, find, ls, bash
 model: claude-sonnet-4-5
+thinking: minimal
 ---
 
 System prompt here.
 ```
+
+Supported frontmatter fields:
+
+- `name`
+- `description`
+- `tools`
+- `model`
+- `thinking` — `off`, `minimal`, `low`, `medium`, `high`, `xhigh`
+
+The extension passes `thinking` through as `--thinking <level>` when launching the child `pi` process.
 
 This repo keeps project-local agents in:
 
 - `agent/agents/*.md`
 
 The extension discovers them from the nearest `.pi/agents` directory when `agentScope` is set to `"project"` or `"both"`.
+
+## Mode toggle
+
+- `/subagents` — toggle subagent mode on/off
+- `--subagents` — start the session with subagent mode enabled
+
+When enabled, the extension adds the `subagent` tool to the active tool list and shows a small status indicator.
+When disabled, the tool is removed from the active tool list.
 
 ## Usage ideas
 

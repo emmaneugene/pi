@@ -4,62 +4,69 @@ Read-only exploration mode for safe code analysis.
 
 ## Features
 
-- **Read-only tools**: Restricts available tools to read, bash, grep, find, ls, question
-- **Bash allowlist**: Only read-only bash commands are allowed
-- **Plan extraction**: Extracts numbered steps from `Plan:` sections
-- **Progress tracking**: Widget shows completion status during execution
-- **[DONE:n] markers**: Explicit step completion tracking
-- **Session persistence**: State survives session resume
+- **Read-only tools**: Restricts available tools to `read`, `bash`, `grep`, `find`, `ls`, `questionnaire`
+- **Bash allowlist**: Only read-only bash commands are permitted
+- **PLAN.md tracking**: Progress is tracked via a standard markdown checklist file — no special markers needed
+- **Session persistence**: Plan mode enabled/disabled state survives session resume
 
 ## Commands
 
-- `/plan` - Toggle plan mode
-- `/todos` - Show current plan progress
-- `Ctrl+Alt+P` - Toggle plan mode (shortcut)
+- `/plan` — Toggle plan mode
+- `Ctrl+Alt+P` — Toggle plan mode (shortcut)
+- `--plan` flag — Start session in plan mode
 
-## Usage
+## Workflow
 
-1. Enable plan mode with `/plan` or `--plan` flag
-2. Ask the agent to analyze code and create a plan
-3. The agent should output a numbered plan under a `Plan:` header:
-
-```
-Plan:
-1. First step description
-2. Second step description
-3. Third step description
-```
-
-4. Choose "Execute the plan" when prompted
-5. During execution, the agent marks steps complete with `[DONE:n]` tags
-6. Progress widget shows completion status
+1. Enable plan mode with `/plan` or the `--plan` flag.
+2. Ask the agent to explore the codebase and produce a plan. The agent outputs
+   a markdown checklist in its response (it cannot write files in plan mode).
+3. When the agent finishes, a prompt appears:
+   - **Execute the plan** — exits plan mode, restores full tools, and asks the
+     agent to write `PLAN.md` then work through it step by step.
+   - **Stay in plan mode** — keep exploring.
+   - **Refine the plan** — open an editor to send a follow-up message.
+4. During execution the agent writes and maintains `PLAN.md`, checking off
+   steps as it completes them (`- [ ]` → `- [x]`).
 
 ## How It Works
 
-### Plan Mode (Read-Only)
-- Only read-only tools available
-- Bash commands filtered through allowlist
-- Agent creates a plan without making changes
+### Plan mode (read-only)
 
-### Execution Mode
-- Full tool access restored
-- Agent executes steps in order
-- `[DONE:n]` markers track completion
-- Widget shows progress
+- Only `read`, `bash`, `grep`, `find`, `ls`, `questionnaire` are available
+- All bash commands are validated against a safe allowlist; destructive
+  commands are blocked with an explanation
+- The agent is instructed via a hidden system message to explore and output a
+  plan — it cannot write files
 
-### Command Allowlist
+### Execution mode
 
-Safe commands (allowed):
-- File inspection: `cat`, `head`, `tail`, `less`, `more`
-- Search: `grep`, `find`, `rg`, `fd`
-- Directory: `ls`, `pwd`, `tree`
-- Git read: `git status`, `git log`, `git diff`, `git branch`
-- Package info: `npm list`, `npm outdated`, `yarn info`
-- System info: `uname`, `whoami`, `date`, `uptime`
+- Plan mode is disabled and full tools are restored
+- The agent writes `PLAN.md` with a `- [ ]` checklist at the start of the run
+- As each step is completed, the agent edits `PLAN.md` to tick it off (`- [x]`)
+- `PLAN.md` is a plain file — you can open, edit, or review it at any time
 
-Blocked commands:
-- File modification: `rm`, `mv`, `cp`, `mkdir`, `touch`
-- Git write: `git add`, `git commit`, `git push`
-- Package install: `npm install`, `yarn add`, `pip install`
-- System: `sudo`, `kill`, `reboot`
-- Editors: `vim`, `nano`, `code`
+## Bash allowlist
+
+**Allowed (read-only):**
+
+| Category | Commands |
+|----------|----------|
+| File inspection | `cat`, `head`, `tail`, `less`, `more` |
+| Search | `grep`, `find`, `rg`, `fd` |
+| Directory | `ls`, `pwd`, `tree` |
+| Text processing | `wc`, `sort`, `uniq`, `diff`, `awk`, `jq`, `sed -n` |
+| Git (read) | `git status`, `git log`, `git diff`, `git show`, `git branch`, `git remote` |
+| Package info | `npm list/view/outdated/audit`, `yarn list/info/audit` |
+| System info | `uname`, `whoami`, `date`, `uptime`, `ps`, `du`, `df` |
+| Other | `curl`, `wget -O -`, `bat`, `exa` |
+
+**Blocked:**
+
+| Category | Commands |
+|----------|----------|
+| File modification | `rm`, `mv`, `cp`, `mkdir`, `touch`, `ln`, `tee`, `truncate` |
+| Redirection | `>`, `>>` |
+| Git (write) | `git add/commit/push/pull/merge/rebase/reset/checkout/clone` |
+| Package install | `npm install`, `yarn add`, `pip install`, `brew install`, etc. |
+| System | `sudo`, `kill`, `reboot`, `shutdown`, `systemctl start/stop` |
+| Editors | `vim`, `nano`, `emacs`, `code` |

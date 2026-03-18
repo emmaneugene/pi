@@ -1,9 +1,9 @@
 {
-  "lastChangelogVersion": "0.58.1",
+  "lastChangelogVersion": "0.60.0",
   "defaultProvider": "anthropic",
   "defaultModel": "claude-sonnet-4-6",
   "hideThinkingBlock": false,
-  "defaultThinkingLevel": "medium",
+  "defaultThinkingLevel": "high",
   "enabledModels": [
     "anthropic/claude-sonnet-4-6",
     "anthropic/claude-opus-4-6",
@@ -20,6 +20,7 @@
     "~/.agents/skills"
   ],
   "packages": [
-    "npm:pi-mcp-adapter"
+    "npm:pi-mcp-adapter",
+    "npm:@plannotator/pi-extension"
   ]
 }

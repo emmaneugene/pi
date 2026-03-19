@@ -26,6 +26,34 @@ import { type AgentConfig, type AgentScope, discoverAgents } from "./agents.js";
 
 const SUBAGENT_TOOL_NAME = "subagent";
 const SUBAGENT_MODE_ENTRY = "subagent-mode";
+const SUBAGENT_PREFS_FILE = path.join(os.homedir(), ".pi", "subagent.json");
+
+function loadGlobalPrefs(): { enabled?: boolean } {
+	try {
+		return JSON.parse(fs.readFileSync(SUBAGENT_PREFS_FILE, "utf-8"));
+	} catch {
+		return {};
+	}
+}
+
+function saveGlobalPrefs(enabled: boolean): void {
+	try {
+		let data: Record<string, unknown> = {};
+		try {
+			data = JSON.parse(fs.readFileSync(SUBAGENT_PREFS_FILE, "utf-8"));
+		} catch {
+			/* no existing file, start fresh */
+		}
+		data.enabled = enabled;
+		fs.mkdirSync(path.dirname(SUBAGENT_PREFS_FILE), { recursive: true });
+		fs.writeFileSync(SUBAGENT_PREFS_FILE, JSON.stringify(data, null, 2) + "\n", {
+			encoding: "utf-8",
+			mode: 0o600,
+		});
+	} catch {
+		/* ignore */
+	}
+}
 const MAX_PARALLEL_TASKS = 8;
 const MAX_CONCURRENCY = 4;
 const COLLAPSED_ITEM_COUNT = 10;
@@ -433,6 +461,7 @@ export default function (pi: ExtensionAPI) {
 
 	function persistState(): void {
 		pi.appendEntry(SUBAGENT_MODE_ENTRY, { enabled: subagentModeEnabled });
+		saveGlobalPrefs(subagentModeEnabled);
 	}
 
 	function applyToolState(ctx: ExtensionContext): void {
@@ -1035,7 +1064,14 @@ export default function (pi: ExtensionAPI) {
 			.pop() as { data?: { enabled?: boolean } } | undefined;
 
 		if (modeEntry?.data?.enabled !== undefined) {
+			// Session entry takes priority — covers fork/tree navigation within a session tree
 			subagentModeEnabled = modeEntry.data.enabled;
+		} else if (!pi.getFlag("subagents")) {
+			// No session entry and no CLI flag — use the cross-session global preference
+			const globalPrefs = loadGlobalPrefs();
+			if (globalPrefs.enabled !== undefined) {
+				subagentModeEnabled = globalPrefs.enabled;
+			}
 		}
 
 		applyToolState(ctx);

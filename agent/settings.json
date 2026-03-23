@@ -1,7 +1,7 @@
 {
-  "lastChangelogVersion": "0.60.0",
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-4-6",
+  "lastChangelogVersion": "0.62.0",
+  "defaultProvider": "github-copilot",
+  "defaultModel": "gpt-5.4",
   "hideThinkingBlock": false,
   "defaultThinkingLevel": "high",
   "enabledModels": [
@@ -14,11 +14,9 @@
     "github-copilot/gpt-5.4",
     "opencode-go/kimi-k2.5",
     "opencode-go/glm-5",
-    "opencode-go/minimax-m2.5"
+    "opencode-go/minimax-m2.7"
   ],
-  "skills": [
-    "~/.agents/skills"
-  ],
+  "skills": ["~/.agents/skills"],
   "packages": [
     "npm:glimpseui",
     "npm:pi-mcp-adapter",

@@ -1,0 +1,4 @@
+agent/sessions
+pi-acp/
+agent/auth.json
+agent/mcp*.json

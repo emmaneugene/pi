@@ -14,9 +14,11 @@ export default function (pi: ExtensionAPI) {
       if (sessionFile) {
         try {
           await unlink(sessionFile);
-        } catch (err) {
-          ctx.ui.notify(`Failed to delete session: ${err}`, "error");
-          return;
+        } catch (err: any) {
+          if (err?.code !== "ENOENT") {
+            ctx.ui.notify(`Failed to delete session: ${err}`, "error");
+            return;
+          }
         }
       }
       ctx.shutdown();

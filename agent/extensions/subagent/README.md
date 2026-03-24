@@ -31,7 +31,7 @@ Agents are markdown files with frontmatter, for example:
 
 ```md
 ---
-name: scout
+name: explorer
 description: Fast codebase recon
 tools: read, grep, find, ls, bash
 model: claude-sonnet-4-5
@@ -70,19 +70,19 @@ When disabled, the tool is removed from the active tool list.
 Single:
 
 ```text
-Use the subagent tool with agent "scout" to find all auth-related code.
+Use the subagent tool with agent "explorer" to find all auth-related code.
 ```
 
 Chain:
 
 ```text
-Use the subagent tool as a chain: scout the login flow, then planner creates an implementation plan using {previous}.
+Use the subagent tool as a chain: explorer maps the login flow, then worker implements the requested change using {previous}.
 ```
 
 Parallel:
 
 ```text
-Use the subagent tool to run two scouts in parallel: one for API routes, one for database models.
+Use the subagent tool to run two explorers in parallel: one for API routes, one for database models.
 ```
 
 ## Notes

@@ -32,8 +32,15 @@
  * restore the `session_start` handler reconstructs thread state from entries
  * after the latest reset marker and rehydrates the widget.
  */
-import { streamSimple, completeSimple, type Message } from "@mariozechner/pi-ai";
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import {
+  streamSimple,
+  completeSimple,
+  type Message,
+} from "@mariozechner/pi-ai";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 
 /** Persisted record for a completed btw exchange, stored via `appendEntry`. */
@@ -95,14 +102,18 @@ export default function (pi: ExtensionAPI) {
 
     // Find the latest reset marker to know which btw entries are active
     for (const entry of ctx.sessionManager.getBranch()) {
-      if (entry.type === "custom" && (entry as any).customType === BTW_RESET_TYPE) {
+      if (
+        entry.type === "custom" &&
+        (entry as any).customType === BTW_RESET_TYPE
+      ) {
         btwThreadStart = (entry as any).data?.timestamp ?? 0;
       }
     }
 
     // Reconstruct thread from entries after the last reset
     for (const entry of ctx.sessionManager.getBranch()) {
-      if (entry.type !== "custom" || (entry as any).customType !== BTW_TYPE) continue;
+      if (entry.type !== "custom" || (entry as any).customType !== BTW_TYPE)
+        continue;
       const entryTime = Date.parse(entry.timestamp) || 0;
       if (entryTime <= btwThreadStart) continue;
       const data = (entry as any).data as BtwDetails | undefined;
@@ -279,7 +290,11 @@ export default function (pi: ExtensionAPI) {
    * 3. Prior btw Q&A pairs for conversational continuity.
    * 4. The new question as the final user message.
    */
-  function buildBtwMessages(ctx: ExtensionContext, model: any, question: string): Message[] {
+  function buildBtwMessages(
+    ctx: ExtensionContext,
+    model: any,
+    question: string,
+  ): Message[] {
     const mainMessages = buildMainMessages(ctx, model);
     const thread = collectBtwThread();
     const all: Message[] = [...mainMessages];
@@ -297,7 +312,12 @@ export default function (pi: ExtensionAPI) {
       });
       all.push({
         role: "assistant",
-        content: [{ type: "text", text: "Understood, continuing our side conversation." }],
+        content: [
+          {
+            type: "text",
+            text: "Understood, continuing our side conversation.",
+          },
+        ],
         model: model.id,
         provider: model.provider,
         api: "",
@@ -353,7 +373,13 @@ export default function (pi: ExtensionAPI) {
     const allMessages = buildBtwMessages(ctx, model, question);
 
     // Create a slot for this btw call
-    const slot: BtwSlot = { question, model: modelLabel, thinking: "", answer: "", done: false };
+    const slot: BtwSlot = {
+      question,
+      model: modelLabel,
+      thinking: "",
+      answer: "",
+      done: false,
+    };
     slots.push(slot);
     renderWidget(ctx);
 
@@ -419,7 +445,8 @@ export default function (pi: ExtensionAPI) {
   // ── Commands ─────────────────────────────────────────────────────
 
   pi.registerCommand("btw", {
-    description: "Ask a side question using current context (works async while agent is busy)",
+    description:
+      "Ask a side question using current context (works async while agent is busy)",
     handler: async (args, ctx) => {
       const question = args.trim();
       if (!question) {
@@ -468,7 +495,10 @@ export default function (pi: ExtensionAPI) {
 
       pi.sendUserMessage(content, { deliverAs: "followUp" });
       resetThread(ctx);
-      ctx.ui.notify(`💭 btw → main: injected ${thread.length} exchange(s)`, "info");
+      ctx.ui.notify(
+        `💭 btw → main: injected ${thread.length} exchange(s)`,
+        "info",
+      );
     },
   });
 
@@ -538,7 +568,10 @@ export default function (pi: ExtensionAPI) {
         pi.sendUserMessage(content, { deliverAs: "followUp" });
 
         resetThread(ctx);
-        ctx.ui.notify(`💭 btw → main: injected summary of ${thread.length} exchange(s)`, "info");
+        ctx.ui.notify(
+          `💭 btw → main: injected summary of ${thread.length} exchange(s)`,
+          "info",
+        );
       } catch (err: any) {
         widgetStatus = null;
         renderWidget(ctx);

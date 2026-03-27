@@ -60,28 +60,35 @@ export default function (pi: ExtensionAPI) {
         if (entry.type === "message") {
           const m = entry.message;
           if (m.role === "user") {
-            if (typeof m.content === "string") msgTokensRaw += estimateTokens(m.content);
+            if (typeof m.content === "string")
+              msgTokensRaw += estimateTokens(m.content);
             else if (Array.isArray(m.content)) {
               for (const p of m.content)
                 if (p.type === "text") msgTokensRaw += estimateTokens(p.text);
             }
           } else if (m.role === "assistant") {
-            if (typeof m.content === "string") msgTokensRaw += estimateTokens(m.content);
+            if (typeof m.content === "string")
+              msgTokensRaw += estimateTokens(m.content);
             else if (Array.isArray(m.content)) {
               for (const p of m.content) {
                 if (p.type === "text") msgTokensRaw += estimateTokens(p.text);
-                if (p.type === "toolCall") toolUseTokensRaw += estimateTokens(JSON.stringify(p));
+                if (p.type === "toolCall")
+                  toolUseTokensRaw += estimateTokens(JSON.stringify(p));
               }
             }
           } else if (m.role === "toolResult") {
             if (Array.isArray(m.content)) {
               for (const p of m.content)
-                if (p.type === "text") toolResultTokensRaw += estimateTokens(p.text);
+                if (p.type === "text")
+                  toolResultTokensRaw += estimateTokens(p.text);
             }
           } else if (m.role === "bashExecution") {
             toolUseTokensRaw += estimateTokens(m.command || "");
           }
-        } else if (entry.type === "branch_summary" || entry.type === "compaction") {
+        } else if (
+          entry.type === "branch_summary" ||
+          entry.type === "compaction"
+        ) {
           msgTokensRaw += estimateTokens(entry.summary || "");
         }
       }
@@ -92,7 +99,11 @@ export default function (pi: ExtensionAPI) {
       const limit = usage.contextWindow;
 
       const totalRaw =
-        systemTokensRaw + toolDefTokensRaw + msgTokensRaw + toolUseTokensRaw + toolResultTokensRaw;
+        systemTokensRaw +
+        toolDefTokensRaw +
+        msgTokensRaw +
+        toolUseTokensRaw +
+        toolResultTokensRaw;
       const ratio = totalRaw > 0 ? totalActual / totalRaw : 1;
 
       const systemTokens = Math.round(systemTokensRaw * ratio);
@@ -104,25 +115,41 @@ export default function (pi: ExtensionAPI) {
       await ctx.ui.custom(
         (tui, theme, kb, done) => {
           const container = new Container();
-          container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
-          container.addChild(new Text(theme.fg("accent", theme.bold(" Context Usage")), 1, 0));
+          container.addChild(
+            new DynamicBorder((s: string) => theme.fg("accent", s)),
+          );
+          container.addChild(
+            new Text(theme.fg("accent", theme.bold(" Context Usage")), 1, 0),
+          );
           container.addChild(new Spacer(1));
 
           // Grouped by function and color
           const categories = [
             { label: "System Prompt", value: systemTokens, color: "muted" },
             { label: "System Tools", value: toolDefTokens, color: "dim" },
-            { label: "Tool Call", value: toolUseTokens + toolResultTokens, color: "success" },
+            {
+              label: "Tool Call",
+              value: toolUseTokens + toolResultTokens,
+              color: "success",
+            },
             { label: "Messages", value: msgTokens, color: "accent" },
           ];
 
           const otherTokens = Math.max(
             0,
             totalActual -
-              (systemTokens + toolDefTokens + msgTokens + toolUseTokens + toolResultTokens),
+              (systemTokens +
+                toolDefTokens +
+                msgTokens +
+                toolUseTokens +
+                toolResultTokens),
           );
           if (otherTokens > 10)
-            categories.push({ label: "Other", value: otherTokens, color: "dim" });
+            categories.push({
+              label: "Other",
+              value: otherTokens,
+              color: "dim",
+            });
 
           categories.push({
             label: "Available",
@@ -163,7 +190,9 @@ export default function (pi: ExtensionAPI) {
           const catDetailLines = categories.map((cat) => {
             const labelStr = cat.label.padEnd(14);
             const valStr = formatTokens(cat.value).padStart(7);
-            const rowPercent = ((cat.value / limit) * 100).toFixed(1).padStart(5);
+            const rowPercent = ((cat.value / limit) * 100)
+              .toFixed(1)
+              .padStart(5);
             const icon = cat.label === "Available" ? "□" : "■";
             return `${theme.fg(cat.color as any, icon)} ${theme.fg("text", labelStr)} ${theme.fg("accent", valStr)} (${rowPercent}%)`;
           });
@@ -179,8 +208,12 @@ export default function (pi: ExtensionAPI) {
           }
 
           container.addChild(new Spacer(1));
-          container.addChild(new Text(theme.fg("dim", " Press any key to close"), 1, 0));
-          container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+          container.addChild(
+            new Text(theme.fg("dim", " Press any key to close"), 1, 0),
+          );
+          container.addChild(
+            new DynamicBorder((s: string) => theme.fg("accent", s)),
+          );
 
           return {
             render: (w) => container.render(w),

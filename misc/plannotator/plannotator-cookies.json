@@ -1,0 +1,19 @@
+{
+  "plannotator-auto-close": "0",
+  "plannotator-color-theme": "claude-plus",
+  "plannotator-diff-indicators": "bars",
+  "plannotator-diff-line-diff-type": "word-alt",
+  "plannotator-diff-overflow": "scroll",
+  "plannotator-diff-show-background": "true",
+  "plannotator-diff-show-line-numbers": "true",
+  "plannotator-diff-style": "split",
+  "plannotator-filebrowser-dirs": "[]",
+  "plannotator-filebrowser-enabled": "true",
+  "plannotator-identity": "nitwit",
+  "plannotator-input-method": "drag",
+  "plannotator-plan-width": "default",
+  "plannotator-sticky-actions-enabled": "true",
+  "plannotator-tater-mode": "false",
+  "plannotator-theme": "light",
+  "plannotator-toc-enabled": "true"
+}

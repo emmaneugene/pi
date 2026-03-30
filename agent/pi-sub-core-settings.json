@@ -1,0 +1,60 @@
+{
+  "version": 3,
+  "tools": {
+    "usageTool": false,
+    "allUsageTool": false
+  },
+  "providers": {
+    "anthropic": {
+      "enabled": "auto",
+      "fetchStatus": true,
+      "extraUsageDecimalSeparator": "."
+    },
+    "copilot": {
+      "enabled": "auto",
+      "fetchStatus": true
+    },
+    "gemini": {
+      "enabled": false,
+      "fetchStatus": true
+    },
+    "antigravity": {
+      "enabled": false,
+      "fetchStatus": true
+    },
+    "codex": {
+      "enabled": "auto",
+      "fetchStatus": true
+    },
+    "kiro": {
+      "enabled": false,
+      "fetchStatus": false
+    },
+    "zai": {
+      "enabled": false,
+      "fetchStatus": false
+    }
+  },
+  "behavior": {
+    "refreshInterval": 300,
+    "minRefreshInterval": 120,
+    "refreshOnTurnStart": false,
+    "refreshOnToolResult": false
+  },
+  "statusRefresh": {
+    "refreshInterval": 60,
+    "minRefreshInterval": 10,
+    "refreshOnTurnStart": false,
+    "refreshOnToolResult": false
+  },
+  "providerOrder": [
+    "anthropic",
+    "copilot",
+    "gemini",
+    "antigravity",
+    "codex",
+    "kiro",
+    "zai"
+  ],
+  "defaultProvider": null
+}

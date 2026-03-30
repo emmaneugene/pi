@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.63.2",
+  "lastChangelogVersion": "0.64.0",
   "defaultProvider": "anthropic",
   "defaultModel": "claude-sonnet-4-6",
   "hideThinkingBlock": false,
@@ -16,10 +16,14 @@
     "opencode-go/glm-5",
     "opencode-go/minimax-m2.7"
   ],
-  "skills": ["~/.agents/skills"],
+  "skills": [
+    "~/.agents/skills"
+  ],
+  "shellPath": "/bin/zsh",
   "packages": [
     "npm:glimpseui",
     "npm:pi-mcp-adapter",
-    "npm:@plannotator/pi-extension"
+    "npm:@plannotator/pi-extension",
+    "npm:@marckrenn/pi-sub-bar"
   ]
 }

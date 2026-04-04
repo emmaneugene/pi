@@ -490,14 +490,6 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
     restoreFromSessionName(ctx);
   });
 
-  pi.on("session_switch", async (_event, ctx) => {
-    resetState();
-    setSummaryStatus(ctx, "idle");
-    config = loadConfig(ctx.cwd);
-    resolveModel();
-    restoreFromSessionName(ctx);
-  });
-
   pi.on("session_before_fork", async (_event, ctx) => {
     await offerSummary(ctx);
   });

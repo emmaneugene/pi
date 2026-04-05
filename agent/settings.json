@@ -1,13 +1,10 @@
 {
-  "lastChangelogVersion": "0.64.0",
-  "defaultProvider": "github-copilot",
-  "defaultModel": "claude-sonnet-4.6",
+  "lastChangelogVersion": "0.65.0",
+  "defaultProvider": "openai-codex",
+  "defaultModel": "gpt-5.4",
   "hideThinkingBlock": false,
-  "defaultThinkingLevel": "high",
+  "defaultThinkingLevel": "xhigh",
   "enabledModels": [
-    "anthropic/claude-opus-4-6",
-    "anthropic/claude-sonnet-4-6",
-    "anthropic/claude-haiku-4-5",
     "github-copilot/claude-opus-4.6",
     "github-copilot/claude-sonnet-4.6",
     "github-copilot/claude-haiku-4.5",

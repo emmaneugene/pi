@@ -31,7 +31,6 @@ interface Question {
   label: string;
   prompt: string;
   options: QuestionOption[];
-  allowOther: boolean;
 }
 
 interface Answer {
@@ -69,11 +68,6 @@ const QuestionSchema = Type.Object({
   options: Type.Array(QuestionOptionSchema, {
     description: "Available options to choose from",
   }),
-  allowOther: Type.Optional(
-    Type.Boolean({
-      description: "Allow 'Type something' option (default: true)",
-    }),
-  ),
 });
 
 const QuestionnaireParams = Type.Object({
@@ -114,7 +108,6 @@ export default function questionnaire(pi: ExtensionAPI) {
       const questions: Question[] = params.questions.map((q, i) => ({
         ...q,
         label: q.label || `Q${i + 1}`,
-        allowOther: q.allowOther !== false,
       }));
 
       const isMulti = questions.length > 1;
@@ -165,15 +158,14 @@ export default function questionnaire(pi: ExtensionAPI) {
           function currentOptions(): RenderOption[] {
             const q = currentQuestion();
             if (!q) return [];
-            const opts: RenderOption[] = [...q.options];
-            if (q.allowOther) {
-              opts.push({
+            return [
+              ...q.options,
+              {
                 value: "__other__",
                 label: "Type something.",
                 isOther: true,
-              });
-            }
-            return opts;
+              },
+            ];
           }
 
           function allAnswered(): boolean {

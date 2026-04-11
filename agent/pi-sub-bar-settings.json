@@ -65,7 +65,7 @@
       "showStatus": true,
       "showMultiplier": true,
       "showRequestsLeft": true,
-      "quotaDisplay": "requests",
+      "quotaDisplay": "percentage",
       "windows": {
         "showMonth": true
       }

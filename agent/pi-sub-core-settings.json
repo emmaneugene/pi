@@ -6,12 +6,12 @@
   },
   "providers": {
     "anthropic": {
-      "enabled": "auto",
+      "enabled": false,
       "fetchStatus": true,
       "extraUsageDecimalSeparator": "."
     },
     "copilot": {
-      "enabled": "auto",
+      "enabled": true,
       "fetchStatus": true
     },
     "gemini": {
@@ -23,7 +23,7 @@
       "fetchStatus": true
     },
     "codex": {
-      "enabled": "auto",
+      "enabled": true,
       "fetchStatus": true
     },
     "kiro": {

@@ -1,11 +1,13 @@
 {
-  "lastChangelogVersion": "0.66.1",
-  "defaultProvider": "github-copilot",
+  "lastChangelogVersion": "0.67.68",
+  "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.4",
   "hideThinkingBlock": false,
   "defaultThinkingLevel": "high",
   "enabledModels": [
+    "github-copilot/claude-opus-4.5",
     "github-copilot/claude-opus-4.6",
+    "github-copilot/claude-opus-4.7",
     "github-copilot/claude-sonnet-4.6",
     "github-copilot/claude-haiku-4.5",
     "github-copilot/gpt-5.4",
@@ -16,7 +18,14 @@
     "openai-codex/gpt-5.4",
     "openai-codex/gpt-5.4-mini",
     "openai-codex/gpt-5.3-codex",
-    "openai-codex/gpt-5.3-codex-spark"
+    "openai-codex/gpt-5.3-codex-spark",
+    "opencode-go/glm-5",
+    "opencode-go/glm-5.1",
+    "opencode-go/kimi-k2.5",
+    "opencode-go/mimo-v2-pro",
+    "opencode-go/mimo-v2-omni",
+    "opencode-go/qwen3.6-plus",
+    "opencode-go/minimax-m2.7"
   ],
   "skills": [
     "~/.agents/skills"

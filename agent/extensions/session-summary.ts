@@ -175,7 +175,9 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
     const name = pi.getSessionName();
     if (!name) return;
 
-    lastSummary = name;
+    // Strip any model prefix like "[model-id] " that we may have prepended
+    const modelPrefixMatch = name.match(/^\[([^\]]+)\] (.+)$/);
+    lastSummary = modelPrefixMatch ? modelPrefixMatch[2] : name;
     const branch = ctx.sessionManager.getBranch() as SessionEntry[];
     lastSummaryEntryId = branch[branch.length - 1]?.id ?? "";
   }
@@ -396,7 +398,9 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
         const changed = text !== lastSummary;
         lastSummary = text;
         lastSummaryEntryId = branch[branch.length - 1]?.id ?? "";
-        pi.setSessionName(lastSummary);
+        const currentModel = ctx.model;
+        const displayModel = currentModel ? `[${currentModel.id}] ` : "";
+        pi.setSessionName(`${displayModel}${lastSummary}`);
         successful = true;
         if (runtimeConfig.verbose && changed) {
           const mode = isIncremental ? "incremental" : "full";

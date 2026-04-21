@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.67.68",
+  "lastChangelogVersion": "0.68.0",
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.4",
   "hideThinkingBlock": false,
@@ -25,7 +25,10 @@
     "opencode-go/mimo-v2-pro",
     "opencode-go/mimo-v2-omni",
     "opencode-go/qwen3.6-plus",
-    "opencode-go/minimax-m2.7"
+    "opencode-go/minimax-m2.7",
+    "opencode-go/kimi-k2.6",
+    "opencode-go/qwen3.5-plus",
+    "opencode-go/minimax-m2.5"
   ],
   "skills": [
     "~/.agents/skills"
@@ -37,5 +40,10 @@
     "npm:@plannotator/pi-extension",
     "npm:@marckrenn/pi-sub-bar",
     "npm:@tintinweb/pi-subagents"
-  ]
+  ],
+  "doubleEscapeAction": "tree",
+  "treeFilterMode": "no-tools",
+  "theme": "dark",
+  "transport": "websocket",
+  "enableSkillCommands": true
 }

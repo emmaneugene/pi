@@ -8,7 +8,7 @@
 ## IMPORTANT RULES
 
 - ALWAYS read before modifying files
-- ALWAYS invoke --help before running a command you aren't familiar with
+- ALWAYS invoke `--help` before running unfamiliar commands or CLIs
 - When scripting, choose a language that minimizes incidental complexity, fits the surrounding ecosystem, and introduces the least dependencies
   - Use Bash only for simple command orchestration; prefer Python with `uv` once the script contains substantial logic, parsing, state, or error handling
   - Prefer JS/TS when the task is adjacent to the browser or web ecosystem
@@ -17,14 +17,14 @@
 - AGENTS.md is an authoritative memory source. If asked to remember something, update the most local AGENTS.md
 - Use `$TMPDIR` for working on small, short-lived files. If it's something the user should see, use `$PWD/tmp/`
 
-## CLI TOOLING
+## TOOLING
 
-These are some specific CLIs and skills available locally:
+These are some specific CLI tools and skills which are particularly useful:
 
 ### Clipboard
 - `clippy`/`pasty`: Clipboard copy and paste
 
-### Browser
+### Web Browser
 - `dev-browser`: Browser automation with a sandboxed JS runtime and Playwright page APIs
 - `cdp`: Manage local Chrome/Chromium instances with remote debugging enabled
   - Prefer `dev-browser` for browser automation instead of ad hoc browser scripting
@@ -33,13 +33,8 @@ These are some specific CLIs and skills available locally:
   - Use `cdp` when you need to attach to a real browser session with existing cookies, logins, or extensions
 
 ### Tmux
-- `agent-tmux`: Manage tmux sessions, panes, waits, and monitor commands on managed private sockets
-
-### Project repositories
-- `repo-catchup`: Track remote branch and tag changes since the last explicit checkpoint in a repo
-- `repo-appraisal`: Appraise repository health from git history: churn hotspots, contributor concentration, bug clusters, commit velocity, and revert/hotfix patterns. Use to understand codebase risk, maintenance burden, or team dynamics before diving in
+- `agent-tmux`: Manage tmux sessions, panes, waits, and monitor commands on managed private sockets. Good for interactive CLIs and long-running commands
 
 ### Artifacts
-- `glimpse`: Open a native webview window (macOS/Linux/Windows) for rich UI: forms, dialogs, charts, markdown, floating widgets. Use when user interaction goes beyond yes/no, or you need to display visual content without a browser. Load the `glimpse` skill for usage details
+- `glimpse` (skill): Open a native webview window (macOS/Linux/Windows) for rich UI: forms, dialogs, charts, markdown, floating widgets. Use when user interaction goes beyond yes/no, or you need to display visual content without a browser. Load the `glimpse` skill for usage details
 - `mermaid-viz`: Open Mermaid diagrams as editable Excalidraw canvases
-- `publish-gist`: Publish Markdown files to GitHub Gists; prefer `scan` or `publish --dry-run` before a live publish

@@ -19,12 +19,14 @@
 
 ## TOOLING
 
-These are some specific CLI tools and skills which are particularly useful:
+These are some CLI tools and skills which may be useful for different tasks:
 
 ### Clipboard
+
 - `clippy`/`pasty`: Clipboard copy and paste
 
 ### Web Browser
+
 - `dev-browser`: Browser automation with a sandboxed JS runtime and Playwright page APIs
 - `cdp`: Manage local Chrome/Chromium instances with remote debugging enabled
   - Prefer `dev-browser` for browser automation instead of ad hoc browser scripting
@@ -33,8 +35,10 @@ These are some specific CLI tools and skills which are particularly useful:
   - Use `cdp` when you need to attach to a real browser session with existing cookies, logins, or extensions
 
 ### Tmux
+
 - `agent-tmux`: Manage tmux sessions, panes, waits, and monitor commands on managed private sockets. Good for interactive CLIs and long-running commands
 
 ### Artifacts
-- `glimpse` (skill): Open a native webview window (macOS/Linux/Windows) for rich UI: forms, dialogs, charts, markdown, floating widgets. Use when user interaction goes beyond yes/no, or you need to display visual content without a browser. Load the `glimpse` skill for usage details
+
+- `glimpse` (skill): Open a native webview window for rich UI: forms, dialogs, charts, markdown, floating widgets. Use when user interaction goes beyond yes/no, or you need to display visual content without a browser
 - `mermaid-viz`: Open Mermaid diagrams as editable Excalidraw canvases

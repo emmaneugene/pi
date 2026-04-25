@@ -5,7 +5,7 @@
  * as the session name. Summaries are offered at natural boundaries (fork and
  * shutdown) with explicit user confirmation.
  *
- * Commands: /summary:update, /summary:clear, /summary:cost, /summary:settings
+ * Commands: /summary:update, /summary:clear, /summary:settings
  * Reference: https://github.com/pasky/pi-session-summary
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -163,9 +163,6 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
   // -- State ------------------------------------------------------------
   let config: SummaryConfig | undefined;
   let resolvedModelName = "";
-  let totalCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
-  let totalTokens = { input: 0, output: 0 };
-  let llmCallCount = 0;
   let lastSummary = "";
   let lastSummaryEntryId = "";
 
@@ -187,9 +184,6 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
     lastSummaryEntryId = "";
     resolvedModelName = "";
     config = undefined;
-    totalCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
-    totalTokens = { input: 0, output: 0 };
-    llmCallCount = 0;
   }
 
   function resolveModel(): { provider: string; model: string } | undefined {
@@ -198,10 +192,7 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
     return { provider: config.provider, model: config.model };
   }
 
-  function setSummaryStatus(
-    ctx: ExtensionContext,
-    state: "idle" | "generating" | "error",
-  ) {
+  function setSummaryStatus(ctx: ExtensionContext, state: "idle" | "generating" | "error") {
     if (!ctx.hasUI) return;
     if (state === "idle") {
       ctx.ui.setStatus(SUMMARY_STATUS_KEY, undefined);
@@ -209,17 +200,11 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
     }
 
     if (state === "generating") {
-      ctx.ui.setStatus(
-        SUMMARY_STATUS_KEY,
-        ctx.ui.theme.fg("accent", "⏳ summary: generating"),
-      );
+      ctx.ui.setStatus(SUMMARY_STATUS_KEY, ctx.ui.theme.fg("accent", "⏳ summary: generating"));
       return;
     }
 
-    ctx.ui.setStatus(
-      SUMMARY_STATUS_KEY,
-      ctx.ui.theme.fg("error", "✗ summary: failed"),
-    );
+    ctx.ui.setStatus(SUMMARY_STATUS_KEY, ctx.ui.theme.fg("error", "✗ summary: failed"));
   }
 
   /** Find the index of an entry by id, searching from the end. */
@@ -367,19 +352,6 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
         } as any,
       );
 
-      if (response.usage) {
-        totalTokens.input += response.usage.input;
-        totalTokens.output += response.usage.output;
-        if (response.usage.cost) {
-          totalCost.input += response.usage.cost.input;
-          totalCost.output += response.usage.cost.output;
-          totalCost.cacheRead += response.usage.cost.cacheRead;
-          totalCost.cacheWrite += response.usage.cost.cacheWrite;
-          totalCost.total += response.usage.cost.total;
-        }
-      }
-      llmCallCount++;
-
       if (response.stopReason === "error") {
         const errMsg = response.errorMessage || "unknown provider error";
         setSummaryStatus(ctx, "error");
@@ -470,17 +442,6 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
       setSummaryStatus(ctx, "idle");
       pi.setSessionName("");
       ctx.ui.notify("Summary cleared", "info");
-    },
-  });
-
-  pi.registerCommand("summary:cost", {
-    description: "Show summary model and its cost this session",
-    handler: async (_args, ctx) => {
-      if (!resolvedModelName) resolveModel();
-      const model = resolvedModelName || "(none)";
-      const costStr = totalCost.total > 0 ? `$${totalCost.total.toFixed(4)}` : "$0";
-      const line = `${model} | ${llmCallCount} calls | tokens: ${totalTokens.input}→${totalTokens.output} | cost: ${costStr} (in: $${totalCost.input.toFixed(4)}, out: $${totalCost.output.toFixed(4)}, cache-r: $${totalCost.cacheRead.toFixed(4)}, cache-w: $${totalCost.cacheWrite.toFixed(4)})`;
-      ctx.ui.notify(line, "info");
     },
   });
 

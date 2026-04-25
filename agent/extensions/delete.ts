@@ -22,6 +22,13 @@ export default function (pi: ExtensionAPI) {
         }
       }
       ctx.shutdown();
+
+      // Work around shutdown handlers that can block interactive teardown (for
+      // example, confirmation prompts during session_shutdown). If graceful
+      // shutdown does not complete immediately, send SIGINT
+      setTimeout(() => {
+        process.kill(process.pid, "SIGINT");
+      }, 100).unref();
     },
   });
 }

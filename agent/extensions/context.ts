@@ -23,8 +23,8 @@ import {
   type ExtensionAPI,
   type SessionManager,
   DynamicBorder,
-} from "@mariozechner/pi-coding-agent";
-import { Container, Text, Spacer } from "@mariozechner/pi-tui";
+} from "@earendil-works/pi-coding-agent";
+import { Container, Text, Spacer } from "@earendil-works/pi-tui";
 
 /** Compact human-readable token count: 1 234 567 → "1.2M", 45 000 → "45k". */
 const formatTokens = (n: number) => {

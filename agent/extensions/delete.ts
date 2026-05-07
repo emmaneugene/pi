@@ -3,7 +3,7 @@
  *
  * Adds a /delete command that deletes the current session file and quits.
  */
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { unlink } from "node:fs/promises";
 
 export default function (pi: ExtensionAPI) {

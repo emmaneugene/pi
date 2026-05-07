@@ -395,17 +395,10 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
     }
   }
 
-  /** Confirm with the user and generate a summary if warranted and approved. */
-  async function offerSummary(ctx: ExtensionContext): Promise<void> {
+  /** Generate a summary at natural boundaries when configured and warranted. */
+  async function triggerSummary(ctx: ExtensionContext): Promise<void> {
     if (!ctx.hasUI || !shouldOffer(ctx)) return;
-
-    const confirmed = await ctx.ui.confirm(
-      "Session Summary",
-      "Would you like to generate a summary of this session?",
-    );
-    if (confirmed) {
-      await generateSummary(ctx);
-    }
+    await generateSummary(ctx);
   }
 
   // -- Commands ---------------------------------------------------------
@@ -456,10 +449,10 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
   });
 
   pi.on("session_before_fork", async (_event, ctx) => {
-    await offerSummary(ctx);
+    await triggerSummary(ctx);
   });
 
   pi.on("session_shutdown", async (_event, ctx) => {
-    await offerSummary(ctx);
+    await triggerSummary(ctx);
   });
 }

@@ -1,6 +1,6 @@
 {
-  "provider": "openai-codex",
-  "model": "gpt-5.4-mini",
+  "provider": "opencode-go",
+  "model": "deepseek-v4-flash",
   "maxTokens": 300,
   "timeoutSeconds": 10,
   "verbose": true,

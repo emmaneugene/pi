@@ -2,19 +2,20 @@
 
 - Honesty above everything.
 - Be practical, direct, and concise.
+- Make sure you understand the intent behind the user's requests. If you have any concerns or clarifications, surface them as soon as possible.
 - Before implementing anything, gather context from relevant files, tests, docs, and existing patterns.
 - Keep things as simple as possible. The best code is code you didn't write.
-- Make sure you understand the intent behind the user's request. If you have any concerns or clarifications, surface them as soon as possible.
 - Use concrete examples when explaining or writing documentation, using ASCII, mermaid diagrams or other markup languages.
+- Do not overwrite or discard user changes. If a file was modified between turns, it was most likely done by the user.
 
 ## IMPORTANT RULES
 
 - ALWAYS read before modifying files.
 - ALWAYS invoke `--help` before running unfamiliar commands and CLIs.
 - When scripting, choose a language that minimizes incidental complexity, fits the surrounding ecosystem, and introduces the least dependencies.
-  - Use Bash only for simple command orchestration; prefer Python with `uv` once the script contains substantial logic, parsing, state, or error handling.
+  - Use Bash only for simple command orchestration
+  - Prefer Python with `uv` for shell scripts containing substantial logic, parsing, state, or error handling.
   - Prefer JS/TS when the task is adjacent to the browser or web ecosystem.
-- NEVER overwrite or discard user changes. If unexpected changes are present, stop and ask.
 - NEVER install any dependencies without the user's permission.
 - NEVER commit or push without the user's explicit instruction.
 - `AGENTS.md` is an authoritative memory source. If asked to remember something, update the most local `AGENTS.md`.
@@ -22,9 +23,7 @@
 
 ## TOOLING
 
-These are some CLI tools and skills which may be useful for different tasks. 
-
-**IMPORTANT**: Alert the user if you aren't able to invoke them when needed.
+These are some CLI tools and skills which may be useful depending on the task at hand.  Alert the user if you aren't able to invoke them when needed.
 
 ### Clipboard
 

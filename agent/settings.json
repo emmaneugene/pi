@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.75.5",
+  "lastChangelogVersion": "0.77.0",
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.5",
   "hideThinkingBlock": false,
@@ -16,7 +16,8 @@
     "opencode-go/mimo-v2.5-pro",
     "opencode-go/mimo-v2.5",
     "opencode-go/deepseek-v4-flash",
-    "opencode-go/deepseek-v4-pro"
+    "opencode-go/deepseek-v4-pro",
+    "opencode-go/qwen3.7-max"
   ],
   "skills": [
     "~/.agents/skills"
@@ -25,9 +26,9 @@
   "packages": [
     "npm:glimpseui",
     "npm:pi-mcp-adapter",
-    "npm:@plannotator/pi-extension",
+    "npm:pi-subagents",
     "npm:@marckrenn/pi-sub-bar",
-    "npm:pi-subagents"
+    "npm:@plannotator/pi-extension"
   ],
   "doubleEscapeAction": "tree",
   "treeFilterMode": "no-tools",

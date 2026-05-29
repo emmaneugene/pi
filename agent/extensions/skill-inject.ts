@@ -12,7 +12,7 @@ import { homedir } from "node:os";
  * registered and loadable via `/skill:name` or explicit `read` calls.
  */
 
-const STATE_FILE = join(homedir(), ".pi", "skill-inject.json");
+const STATE_FILE = join(homedir(), ".pi", "agent", "skill-inject.json");
 
 function loadState(): { enabled: boolean } {
   try {

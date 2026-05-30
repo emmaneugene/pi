@@ -453,6 +453,15 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
   });
 
   pi.on("session_shutdown", async (_event, ctx) => {
+    // Skip summary if the session is being deleted
+    if (
+      ctx.sessionManager
+        .getEntries()
+        .some((e) => e.type === "custom" && e.customType === "delete-session")
+    ) {
+      return;
+    }
+
     await triggerSummary(ctx);
   });
 }

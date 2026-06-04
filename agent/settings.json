@@ -26,7 +26,6 @@
   "packages": [
     "npm:glimpseui",
     "npm:pi-mcp-adapter",
-    "npm:pi-subagents",
     "npm:@marckrenn/pi-sub-bar",
     "npm:@plannotator/pi-extension"
   ],

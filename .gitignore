@@ -2,5 +2,6 @@ agent/sessions/
 agent/auth.json
 agent/mcp*.json
 agent/run-history.jsonl
+agent/trust.json
 pi-acp/
 cache/

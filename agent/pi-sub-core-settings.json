@@ -6,12 +6,12 @@
   },
   "providers": {
     "anthropic": {
-      "enabled": false,
+      "enabled": true,
       "fetchStatus": true,
       "extraUsageDecimalSeparator": "."
     },
     "copilot": {
-      "enabled": true,
+      "enabled": false,
       "fetchStatus": true
     },
     "gemini": {
@@ -47,14 +47,6 @@
     "refreshOnTurnStart": false,
     "refreshOnToolResult": false
   },
-  "providerOrder": [
-    "anthropic",
-    "copilot",
-    "gemini",
-    "antigravity",
-    "codex",
-    "kiro",
-    "zai"
-  ],
+  "providerOrder": ["anthropic", "copilot", "gemini", "antigravity", "codex", "kiro", "zai"],
   "defaultProvider": null
 }

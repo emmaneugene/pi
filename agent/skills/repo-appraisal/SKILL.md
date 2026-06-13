@@ -1,6 +1,7 @@
 ---
 name: repo-appraisal
 description: "Appraise a project from git history - churn hotspots, contributor concentration, bug clusters, velocity trend, and firefighting frequency. Use when asked to appraise, audit, or assess the risk profile of a git-backed codebase, especially before reading much code."
+source: https://piechowski.io/post/git-commands-before-reading-code/
 ---
 
 # Repo Appraisal

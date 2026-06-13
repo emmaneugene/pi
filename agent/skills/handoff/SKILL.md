@@ -48,6 +48,6 @@ Use the template in `template.md`.
 
 Treat any user-provided arguments as guidance for the handoff focus, such as:
 
-- what should happen next
-- what phase or area to emphasize
-- what the receiving person/session should do first
+- What should happen next
+- What phase or area to emphasize
+- What the receiving person/session should do first

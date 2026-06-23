@@ -11,7 +11,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { complete } from "@earendil-works/pi-ai";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
 // -- Configuration --------------------------------------------------------
@@ -74,7 +77,9 @@ function loadConfig(cwd: string): SummaryConfig | undefined {
         const parsed = JSON.parse(content);
         raw = { ...raw, ...parsed };
       } catch (err) {
-        console.error(`[session-summary] Failed to load config from ${path}: ${err}`);
+        console.error(
+          `[session-summary] Failed to load config from ${path}: ${err}`,
+        );
       }
     }
   }
@@ -88,7 +93,10 @@ function loadConfig(cwd: string): SummaryConfig | undefined {
     model,
     maxTokens: toPositiveInt(raw.maxTokens, DEFAULTS.maxTokens),
     timeoutSeconds: toPositiveInt(raw.timeoutSeconds, DEFAULTS.timeoutSeconds),
-    resummarizeThreshold: toPositiveInt(raw.resummarizeThreshold, DEFAULTS.resummarizeThreshold),
+    resummarizeThreshold: toPositiveInt(
+      raw.resummarizeThreshold,
+      DEFAULTS.resummarizeThreshold,
+    ),
     verbose: toBoolean(raw.verbose, DEFAULTS.verbose),
   };
 }
@@ -192,7 +200,10 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
     return { provider: config.provider, model: config.model };
   }
 
-  function setSummaryStatus(ctx: ExtensionContext, state: "idle" | "generating" | "error") {
+  function setSummaryStatus(
+    ctx: ExtensionContext,
+    state: "idle" | "generating" | "error",
+  ) {
     if (!ctx.hasUI) return;
     if (state === "idle") {
       ctx.ui.setStatus(SUMMARY_STATUS_KEY, undefined);
@@ -200,11 +211,17 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
     }
 
     if (state === "generating") {
-      ctx.ui.setStatus(SUMMARY_STATUS_KEY, ctx.ui.theme.fg("accent", "⏳ summary: generating"));
+      ctx.ui.setStatus(
+        SUMMARY_STATUS_KEY,
+        ctx.ui.theme.fg("accent", "⏳ summary: generating"),
+      );
       return;
     }
 
-    ctx.ui.setStatus(SUMMARY_STATUS_KEY, ctx.ui.theme.fg("error", "✗ summary: failed"));
+    ctx.ui.setStatus(
+      SUMMARY_STATUS_KEY,
+      ctx.ui.theme.fg("error", "✗ summary: failed"),
+    );
   }
 
   /** Find the index of an entry by id, searching from the end. */
@@ -253,7 +270,9 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
 
     const newEntries = getNewEntries(branch);
     if (!newEntries) return true; // no anchor → offer
-    return estimateUserAssistantTokens(newEntries) >= config.resummarizeThreshold;
+    return (
+      estimateUserAssistantTokens(newEntries) >= config.resummarizeThreshold
+    );
   }
 
   /** Await the LLM to generate and store a summary. */
@@ -291,7 +310,9 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
     }
 
     const newEntries = getNewEntries(branch);
-    const newConversation = newEntries ? buildConversation(newEntries).trim() : "";
+    const newConversation = newEntries
+      ? buildConversation(newEntries).trim()
+      : "";
     const isIncremental = lastSummary && newEntries && newConversation;
 
     let prompt: string;
@@ -411,9 +432,13 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
         mkdirSync(dirname(globalPath), { recursive: true });
         writeFileSync(
           globalPath,
-          JSON.stringify({ ...DEFAULTS, provider: "", model: "" }, null, 2) + "\n",
+          JSON.stringify({ ...DEFAULTS, provider: "", model: "" }, null, 2) +
+            "\n",
         );
-        ctx.ui.notify(`Created ${globalPath} — set provider and model, then /reload`, "info");
+        ctx.ui.notify(
+          `Created ${globalPath} — set provider and model, then /reload`,
+          "info",
+        );
       } else {
         ctx.ui.notify(`Settings: ${globalPath}`, "info");
       }
@@ -453,11 +478,11 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
   });
 
   pi.on("session_shutdown", async (_event, ctx) => {
-    // Skip summary if the session is being deleted
+    // Escape clause for skipping summary
     if (
       ctx.sessionManager
         .getEntries()
-        .some((e) => e.type === "custom" && e.customType === "delete-session")
+        .some((e) => e.type === "custom" && e.customType === "skip-summary")
     ) {
       return;
     }

@@ -12,8 +12,7 @@ export default function (pi: ExtensionAPI) {
     handler: async (_args, ctx) => {
       const oldSessionFile = ctx.sessionManager.getSessionFile();
 
-      
-      pi.appendEntry("delete-session", {});
+      pi.appendEntry("skip-summary", {});
 
       await ctx.newSession({
         withSession: async (newCtx) => {
@@ -28,7 +27,10 @@ export default function (pi: ExtensionAPI) {
               }
             }
           } else {
-            newCtx.ui.notify("No session file to delete (ephemeral session).", "info");
+            newCtx.ui.notify(
+              "No session file to delete (ephemeral session).",
+              "info",
+            );
           }
         },
       });

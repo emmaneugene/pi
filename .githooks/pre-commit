@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+#
+# pre-commit: auto-format staged files with Prettier.
+#
+# Behavior:
+#   - Runs Prettier (--write) on all staged, prettier-supported files.
+#   - Prettier respects ~/.editorconfig automatically (indent, eol, etc.).
+#   - If anything was reformatted, the fixes are re-staged and the commit is
+#     BLOCKED so you can review and re-commit. A clean run lets the commit pass.
+#
+# Caveat: if a file is both staged and has further unstaged changes, the
+# reformat + re-stage will also stage those unstaged changes. Commit such
+# files fully, or stash unstaged work before committing.
+
+set -euo pipefail
+
+# Resolve prettier: prefer one on PATH, fall back to bunx/npx.
+if command -v prettier >/dev/null 2>&1; then
+	PRETTIER=(prettier)
+elif command -v bunx >/dev/null 2>&1; then
+	PRETTIER=(bunx prettier)
+elif command -v npx >/dev/null 2>&1; then
+	PRETTIER=(npx --yes prettier)
+else
+	echo "pre-commit: prettier not found on PATH (and no bunx/npx)." >&2
+	exit 1
+fi
+
+# Collect staged files (Added/Copied/Modified/Renamed), NUL-delimited for safety.
+mapfile -d '' -t STAGED < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+if [ ${#STAGED[@]} -eq 0 ]; then
+	exit 0
+fi
+
+# Format in place; --ignore-unknown skips files prettier can't handle.
+"${PRETTIER[@]}" --write --ignore-unknown -- "${STAGED[@]}"
+
+# Determine which of the staged files prettier actually changed.
+mapfile -d '' -t CHANGED < <(git diff --name-only -z -- "${STAGED[@]}")
+
+if [ ${#CHANGED[@]} -eq 0 ]; then
+	exit 0
+fi
+
+# Re-stage the formatted files and block the commit.
+git add -- "${CHANGED[@]}"
+
+echo "" >&2
+echo "pre-commit: Prettier reformatted ${#CHANGED[@]} file(s):" >&2
+for f in "${CHANGED[@]}"; do
+	echo "  - $f" >&2
+done
+echo "" >&2
+echo "Fixes have been staged. Review them and re-run your commit." >&2
+exit 1

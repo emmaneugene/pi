@@ -1,7 +1,7 @@
 {
-  "lastChangelogVersion": "0.79.3",
-  "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-5.5",
+  "lastChangelogVersion": "0.79.10",
+  "defaultProvider": "anthropic",
+  "defaultModel": "claude-opus-4-8",
   "hideThinkingBlock": false,
   "defaultThinkingLevel": "medium",
   "enabledModels": [
@@ -11,28 +11,28 @@
     "openai-codex/gpt-5.5",
     "openai-codex/gpt-5.4",
     "openai-codex/gpt-5.4-mini",
-    "opencode-go/glm-5.1",
+    "opencode-go/glm-5.2",
     "opencode-go/kimi-k2.7-code",
     "opencode-go/kimi-k2.6",
-    "opencode-go/qwen3.6-plus",
-    "opencode-go/minimax-m2.7",
-    "opencode-go/mimo-v2.5-pro",
-    "opencode-go/mimo-v2.5",
+    "opencode-go/qwen3.7-max",
+    "opencode-go/qwen3.7-plus",
     "opencode-go/deepseek-v4-flash",
-    "opencode-go/deepseek-v4-pro",
-    "opencode-go/qwen3.7-max"
+    "opencode-go/deepseek-v4-pro"
   ],
   "skills": ["~/.agents/skills"],
   "shellPath": "/bin/zsh",
   "packages": [
-    "npm:glimpseui",
     "npm:pi-mcp-adapter",
     "npm:@marckrenn/pi-sub-bar",
-    "npm:@plannotator/pi-extension"
+    "git:github.com/emmaneugene/annotator",
+    "npm:@gotgenes/pi-anthropic-auth"
   ],
   "doubleEscapeAction": "tree",
   "treeFilterMode": "no-tools",
-  "theme": "dark",
+  "theme": "light",
   "transport": "websocket",
-  "enableSkillCommands": true
+  "enableSkillCommands": true,
+  "collapseChangelog": true,
+  "enableInstallTelemetry": true,
+  "defaultProjectTrust": "always"
 }

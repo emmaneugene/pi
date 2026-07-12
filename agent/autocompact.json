@@ -1,0 +1,5 @@
+{
+  "enabled": true,
+  "thresholdPercent": 80,
+  "thresholdTokens": 400000
+}

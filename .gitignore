@@ -1,3 +1,4 @@
+agent/mcp-oauth/
 agent/sessions/
 agent/auth.json
 agent/mcp*.json

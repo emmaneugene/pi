@@ -5,15 +5,21 @@
 
 import { dirname, join } from "node:path";
 import {
+  CONFIG_DIR_NAME,
   defineTool,
   type ExtensionContext,
   getAgentDir,
 } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { resolveModel } from "./child-session.ts";
 import type { SubagentManager } from "./manager.ts";
 import type { AgentRegistry } from "./registry.ts";
-import type { SubagentType } from "./types.ts";
+import type {
+  InvocationSetting,
+  SubagentInvocation,
+  SubagentType,
+} from "./types.ts";
 
 export const SUBAGENT_TOOL_NAMES = [
   "subagent",
@@ -22,10 +28,26 @@ export const SUBAGENT_TOOL_NAMES = [
 ] as const;
 
 const DISABLED_MESSAGE =
-  "Subagents are disabled. Run /subagents to enable them.";
+  "Subagents are disabled. Run /toggle-subagents to enable them.";
 
-function textResult(text: string) {
-  return { content: [{ type: "text" as const, text }] };
+interface SubagentToolDetails {
+  agentId?: string;
+  invocation?: SubagentInvocation;
+}
+
+function textResult(text: string, details?: SubagentToolDetails) {
+  return { content: [{ type: "text" as const, text }], details };
+}
+
+function sourceLabel(setting: InvocationSetting): string {
+  if (setting.source === "tool override") return "override";
+  if (setting.source === "agent definition") return "definition";
+  if (setting.source === "inherited/default") return "inherited";
+  return "unknown";
+}
+
+function invocationLine(invocation: SubagentInvocation): string {
+  return `${invocation.type} · ${invocation.model.value} (${sourceLabel(invocation.model)}) · ${invocation.thinking.value} (${sourceLabel(invocation.thinking)})`;
 }
 
 /** Format a background-completion / status line for the orchestrator. */
@@ -53,6 +75,7 @@ export function registerTools(
 ): void {
   const types = () => registry.availableTypes().join(", ");
   const globalAgentsDir = join(dirname(getAgentDir()), "agents");
+  const invocationsByCall = new Map<string, SubagentInvocation>();
 
   // ── subagent ────────────────────────────────────────────────────────────
   pi.registerTool(
@@ -61,7 +84,7 @@ export function registerTools(
       label: "Subagent",
       description:
         `Launch a sub-agent for a multi-step task. Each runs in a fresh session with its own tool scope and system prompt. It has NOT seen this conversation, so the prompt must be self-contained.\n\n` +
-        `Available types: ${types()}. Custom agents live in .pi/agents/<name>.md (project) or ${globalAgentsDir}/<name>.md (global).\n\n` +
+        `Available types: ${types()}. Custom agents live in ${CONFIG_DIR_NAME}/agents/<name>.md (project) or ${globalAgentsDir}/<name>.md (global).\n\n` +
         `- description: 3-5 words, shown in the UI.\n` +
         `- run_in_background: returns an id immediately; you are notified on completion (never poll).\n` +
         `- The result is not shown to the user — summarize it for them. Verify claimed code changes before reporting work done.`,
@@ -100,7 +123,7 @@ export function registerTools(
         ),
       }),
       execute: async (
-        _id,
+        toolCallId,
         params,
         signal,
         _onUpdate,
@@ -127,8 +150,11 @@ export function registerTools(
             isBackground: true,
             signal: ctx.signal,
           });
+          const invocation = manager.getRecord(id)!.invocation;
+          invocationsByCall.set(toolCallId, invocation);
           return textResult(
-            `Launched background agent "${params.description}" (id: ${id}). You will be notified on completion.`,
+            `Launched background agent "${params.description}" (id: ${id}). You will be notified on completion.\n${invocationLine(invocation)}`,
+            { agentId: id, invocation },
           );
         }
 
@@ -145,9 +171,51 @@ export function registerTools(
             signal: signal ?? ctx.signal,
           },
         );
+        invocationsByCall.set(toolCallId, record.invocation);
         return textResult(
           record.result?.trim() || record.error?.trim() || "No output.",
+          { agentId: record.id, invocation: record.invocation },
         );
+      },
+      renderCall(params, theme, context) {
+        const invocation = invocationsByCall.get(context.toolCallId);
+        const config = registry.isAvailable(params.subagent_type)
+          ? registry.resolve(params.subagent_type)
+          : undefined;
+        const model = invocation?.model ?? {
+          value: params.model ?? config?.model ?? "inherit",
+          source: params.model
+            ? ("tool override" as const)
+            : config?.model
+              ? ("agent definition" as const)
+              : ("inherited/default" as const),
+        };
+        const thinking = invocation?.thinking ?? {
+          value: config?.thinking ?? pi.getThinkingLevel(),
+          source: config?.thinking
+            ? ("agent definition" as const)
+            : ("inherited/default" as const),
+        };
+        const description = params.description || "subagent";
+        const type = invocation?.type ?? params.subagent_type ?? "unknown";
+        const text =
+          theme.fg("toolTitle", theme.bold("subagent ")) +
+          theme.fg("accent", description) +
+          `\n  ${theme.fg("muted", type)} ${theme.fg("dim", `· ${model.value} (${sourceLabel(model)}) · ${thinking.value} (${sourceLabel(thinking)})`)}`;
+        return new Text(text, 0, 0);
+      },
+      renderResult(result, _options, theme, context) {
+        const details = result.details as SubagentToolDetails | undefined;
+        if (details?.invocation && !invocationsByCall.has(context.toolCallId)) {
+          invocationsByCall.set(context.toolCallId, details.invocation);
+          context.invalidate();
+        }
+        const content = result.content[0];
+        const text =
+          content?.type === "text"
+            ? content.text
+            : "Subagent returned no output.";
+        return new Text(theme.fg("toolOutput", text), 0, 0);
       },
     }),
   );

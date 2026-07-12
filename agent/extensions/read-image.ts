@@ -1,8 +1,11 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { complete } from "@earendil-works/pi-ai";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { Model } from "@earendil-works/pi-ai";
+import { complete } from "@earendil-works/pi-ai/compat";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
+import type { Model } from "@earendil-works/pi-ai/compat";
 import { Type } from "typebox";
 
 const VISION_PROVIDER = "openai-codex";
@@ -67,18 +70,26 @@ async function askVisionModel(
 ): Promise<string> {
   const model = ctx.modelRegistry.find(VISION_PROVIDER, VISION_MODEL);
   if (!model) {
-    throw new Error(`Vision model not found: ${VISION_PROVIDER}/${VISION_MODEL}`);
+    throw new Error(
+      `Vision model not found: ${VISION_PROVIDER}/${VISION_MODEL}`,
+    );
   }
 
   const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
   if (!auth.ok) {
-    throw new Error(`Auth failed for ${VISION_PROVIDER}/${VISION_MODEL}: ${auth.error}`);
+    throw new Error(
+      `Auth failed for ${VISION_PROVIDER}/${VISION_MODEL}: ${auth.error}`,
+    );
   }
   if (!auth.apiKey) {
-    throw new Error(`No API key or login token available for ${VISION_PROVIDER}`);
+    throw new Error(
+      `No API key or login token available for ${VISION_PROVIDER}`,
+    );
   }
 
-  const loadedImages = await Promise.all(imagePaths.map((p) => loadImage(ctx.cwd, p)));
+  const loadedImages = await Promise.all(
+    imagePaths.map((p) => loadImage(ctx.cwd, p)),
+  );
 
   const response = await complete(
     model,
@@ -103,7 +114,9 @@ async function askVisionModel(
   );
 
   const text = response.content
-    .filter((part): part is { type: "text"; text: string } => part.type === "text")
+    .filter(
+      (part): part is { type: "text"; text: string } => part.type === "text",
+    )
     .map((part) => part.text)
     .join("\n")
     .trim();
@@ -140,7 +153,9 @@ export default function (pi: ExtensionAPI) {
       paths: Type.Array(Type.String(), {
         description: "Relative or absolute paths to image files.",
       }),
-      prompt: Type.String({ description: "Questions or instructions for the vision model." }),
+      prompt: Type.String({
+        description: "Questions or instructions for the vision model.",
+      }),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const imagePaths = params.paths;
@@ -148,12 +163,22 @@ export default function (pi: ExtensionAPI) {
       if (imagePaths.length === 0) {
         return {
           isError: true,
-          content: [{ type: "text", text: "read_image requires at least one path in `paths`." }],
+          content: [
+            {
+              type: "text",
+              text: "read_image requires at least one path in `paths`.",
+            },
+          ],
           details: {},
         };
       }
 
-      const answer = await askVisionModel(ctx, params.prompt, imagePaths, signal);
+      const answer = await askVisionModel(
+        ctx,
+        params.prompt,
+        imagePaths,
+        signal,
+      );
       return {
         content: [{ type: "text", text: answer }],
         details: {

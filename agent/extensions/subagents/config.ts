@@ -1,30 +1,21 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { readJsonFile, writeJsonFile } from "../../lib/json-state.ts";
 
-const STATE_FILE = join(homedir(), ".pi", "agent", "subagents.json");
+const STATE_FILE = join(getAgentDir(), "subagents.json");
 
 export interface SubagentsState {
   enabled: boolean;
 }
 
 export function loadState(): SubagentsState {
-  try {
-    if (existsSync(STATE_FILE)) {
-      const state = JSON.parse(
-        readFileSync(STATE_FILE, "utf-8"),
-      ) as Partial<SubagentsState>;
-      if (typeof state.enabled === "boolean") return { enabled: state.enabled };
-    }
-  } catch {
-    // ignore parse/read errors
-  }
+  const state = readJsonFile(STATE_FILE) as Partial<SubagentsState> | undefined;
+  if (typeof state?.enabled === "boolean") return { enabled: state.enabled };
   return { enabled: true };
 }
 
 export function saveState(state: SubagentsState): void {
-  mkdirSync(dirname(STATE_FILE), { recursive: true });
-  writeFileSync(STATE_FILE, JSON.stringify(state, null, 2) + "\n");
+  writeJsonFile(STATE_FILE, state);
 }
 
 export { STATE_FILE };

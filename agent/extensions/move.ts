@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -39,6 +40,10 @@ function expandHome(p: string): string {
   return p;
 }
 
+function commandExists(cmd: string): boolean {
+  return spawnSync("which", [cmd], { stdio: "ignore" }).status === 0;
+}
+
 function copyToClipboard(text: string): boolean {
   // Prefer clippy, then platform-native fallbacks.
   const candidates: Array<[string, string[]]> = [
@@ -48,7 +53,7 @@ function copyToClipboard(text: string): boolean {
     ["xclip", ["-selection", "clipboard"]],
   ];
   for (const [cmd, cmdArgs] of candidates) {
-    if (spawnSync("which", [cmd], { stdio: "ignore" }).status !== 0) continue;
+    if (!commandExists(cmd)) continue;
     const r = spawnSync(cmd, cmdArgs, {
       input: text,
       stdio: ["pipe", "ignore", "ignore"],
@@ -58,16 +63,67 @@ function copyToClipboard(text: string): boolean {
   return false;
 }
 
-function trashOrRemove(file: string): { method: "trash" | "rm"; ok: boolean } {
-  const hasTrash =
-    spawnSync("which", ["trash"], { stdio: "ignore" }).status === 0;
-  if (hasTrash) {
-    const r = spawnSync("trash", [file], { stdio: "ignore" });
+/**
+ * Relocate the current session's subagent transcripts. Children live in a
+ * per-parent folder `<sessionDir>/subagents/<parentSessionId>/`, so ownership
+ * is structural — no header filtering. Each child still embeds an absolute
+ * `cwd` inherited from the parent, so rewrite that as we copy into the
+ * destination folder, then trash the original folder wholesale.
+ */
+function moveSubagentSessions(
+  sourceSessionDir: string,
+  destSessionDir: string,
+  parentSessionId: string,
+  targetCwd: string,
+): { moved: number; failed: number } {
+  const sourceDir = join(sourceSessionDir, "subagents", parentSessionId);
+  if (!existsSync(sourceDir)) return { moved: 0, failed: 0 };
+
+  let entries: string[];
+  try {
+    entries = readdirSync(sourceDir).filter((f) => f.endsWith(".jsonl"));
+  } catch {
+    return { moved: 0, failed: 0 };
+  }
+
+  const destDir = join(destSessionDir, "subagents", parentSessionId);
+  let moved = 0;
+  let failed = 0;
+
+  for (const name of entries) {
+    let lines: string[];
+    let header: { cwd?: string };
+    try {
+      lines = readFileSync(join(sourceDir, name), "utf8").split("\n");
+      header = JSON.parse(lines[0]);
+    } catch {
+      failed++;
+      continue; // unreadable/unparseable — leave the source folder in place
+    }
+    header.cwd = targetCwd;
+    lines[0] = JSON.stringify(header);
+    try {
+      mkdirSync(destDir, { recursive: true });
+      writeFileSync(join(destDir, name), lines.join("\n"));
+      moved++;
+    } catch {
+      failed++;
+    }
+  }
+
+  // Only trash the original folder once every child copied cleanly.
+  if (moved > 0 && failed === 0) trashOrRemove(sourceDir);
+  return { moved, failed };
+}
+
+function trashOrRemove(path: string): { method: "trash" | "rm"; ok: boolean } {
+  if (commandExists("trash")) {
+    const r = spawnSync("trash", [path], { stdio: "ignore" });
     return { method: "trash", ok: r.status === 0 };
   }
   try {
-    // Fallback: permanent delete.
-    rmSync(file, { force: true });
+    // Fallback: permanent delete (handles both files and directories).
+    rmSync(path, { force: true, recursive: true });
     return { method: "rm", ok: true };
   } catch {
     return { method: "rm", ok: false };
@@ -118,7 +174,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       // sessionsRoot = parent of the current session-dir, so we respect a
-      // rebranded config dir name instead of hardcoding ~/.pi.
+      // rebranded config dir name instead of assuming the default config path.
       const sessionsRoot = dirname(sm.getSessionDir());
       const destDir = join(sessionsRoot, encodeDir(resolve(targetDir)));
       const destFile = join(destDir, basename(sourceFile));
@@ -166,6 +222,15 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
+      // Relocate subagent transcripts owned by this session before we trash
+      // the parent, so children follow the parent into the new cwd.
+      const subagents = moveSubagentSessions(
+        sm.getSessionDir(),
+        destDir,
+        sessionId,
+        resolve(targetDir),
+      );
+
       // Skip session summary so setSessionName() doesn't resurrect a
       // session_info file in the original session dir
       pi.appendEntry("skip-summary", {});
@@ -184,8 +249,12 @@ export default function (pi: ExtensionAPI) {
           "error",
         );
       } else {
+        const subMsg =
+          subagents.moved > 0 || subagents.failed > 0
+            ? ` (${subagents.moved} subagent session${subagents.moved === 1 ? "" : "s"} moved${subagents.failed > 0 ? `, ${subagents.failed} failed` : ""})`
+            : "";
         ctx.ui.notify(
-          `Moved to ${destFile}. Closing pi — ${copied ? "resume command copied to clipboard" : `resume with: ${resumeCmd}`}`,
+          `Moved to ${destFile}${subMsg}. Closing pi — ${copied ? "resume command copied to clipboard" : `resume with: ${resumeCmd}`}`,
           "info",
         );
       }

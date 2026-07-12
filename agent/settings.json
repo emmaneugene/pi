@@ -1,38 +1,48 @@
 {
-  "lastChangelogVersion": "0.79.10",
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-opus-4-8",
+  "lastChangelogVersion": "0.80.6",
+  "defaultProvider": "openai-codex",
+  "defaultModel": "gpt-5.6-terra",
   "hideThinkingBlock": false,
   "defaultThinkingLevel": "medium",
   "enabledModels": [
+    "anthropic/claude-fable-5",
     "anthropic/claude-opus-4-8",
-    "anthropic/claude-sonnet-4-6",
+    "anthropic/claude-sonnet-5",
     "anthropic/claude-haiku-4-5",
-    "openai-codex/gpt-5.5",
-    "openai-codex/gpt-5.4",
-    "openai-codex/gpt-5.4-mini",
-    "opencode-go/glm-5.2",
-    "opencode-go/kimi-k2.7-code",
-    "opencode-go/kimi-k2.6",
-    "opencode-go/qwen3.7-max",
-    "opencode-go/qwen3.7-plus",
-    "opencode-go/deepseek-v4-flash",
-    "opencode-go/deepseek-v4-pro"
+    "openai-codex/gpt-5.6-sol",
+    "openai-codex/gpt-5.6-terra",
+    "openai-codex/gpt-5.6-luna",
+    "openrouter/z-ai/glm-5.2",
+    "openrouter/moonshotai/kimi-k2.6",
+    "openrouter/moonshotai/kimi-k2.7-code",
+    "openrouter/deepseek/deepseek-v4-flash",
+    "openrouter/deepseek/deepseek-v4-pro"
   ],
   "skills": ["~/.agents/skills"],
   "shellPath": "/bin/zsh",
   "packages": [
     "npm:pi-mcp-adapter",
     "npm:@marckrenn/pi-sub-bar",
-    "git:github.com/emmaneugene/annotator",
-    "npm:@gotgenes/pi-anthropic-auth"
+    "npm:@plannotator/pi-extension@0.22.0",
+    "npm:@gotgenes/pi-anthropic-auth",
+    "npm:pi-web-providers"
   ],
   "doubleEscapeAction": "tree",
   "treeFilterMode": "no-tools",
-  "theme": "light",
-  "transport": "websocket",
+  "theme": "light/dark",
+  "transport": "auto",
   "enableSkillCommands": true,
   "collapseChangelog": true,
   "enableInstallTelemetry": true,
-  "defaultProjectTrust": "always"
+  "defaultProjectTrust": "always",
+  "terminal": {
+    "imageWidthCells": 60,
+    "showTerminalProgress": true
+  },
+  "autocompleteMaxVisible": 5,
+  "showCacheMissNotices": true,
+  "warnings": {
+    "anthropicExtraUsage": false
+  },
+  "outputPad": 1
 }

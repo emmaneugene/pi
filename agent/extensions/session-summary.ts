@@ -10,12 +10,12 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { complete } from "@earendil-works/pi-ai";
+import { complete } from "@earendil-works/pi-ai/compat";
 import type {
   ExtensionAPI,
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { CONFIG_DIR_NAME, getAgentDir } from "@earendil-works/pi-coding-agent";
 
 // -- Configuration --------------------------------------------------------
 
@@ -66,7 +66,7 @@ function toBoolean(value: unknown, fallback: boolean): boolean {
 
 function loadConfig(cwd: string): SummaryConfig | undefined {
   const globalPath = join(getAgentDir(), "session-summary.json");
-  const projectPath = join(cwd, ".pi", "session-summary.json");
+  const projectPath = join(cwd, CONFIG_DIR_NAME, "session-summary.json");
 
   let raw: Record<string, unknown> = { ...DEFAULTS };
 

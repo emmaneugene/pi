@@ -6,20 +6,66 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
+import { clampThinkingLevel } from "@earendil-works/pi-ai/compat";
+import {
+  type ExtensionAPI,
+  type ExtensionContext,
+  getAgentDir,
+  SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { type RunOptions, runChildSession } from "./child-session.ts";
+import {
+  type RunOptions,
+  resolveModel,
+  runChildSession,
+} from "./child-session.ts";
 import type { AgentRegistry } from "./registry.ts";
-import type {
-  AgentConfig,
-  AgentRecord,
-  SpawnOptions,
-  SubagentType,
+import {
+  type AgentConfig,
+  type AgentRecord,
+  type SpawnOptions,
+  SUBAGENT_INVOCATION_ENTRY,
+  type SubagentInvocation,
+  type SubagentType,
 } from "./types.ts";
 
 export type OnComplete = (record: AgentRecord) => void;
+
+function resolveInvocation(
+  ctx: ExtensionContext,
+  config: AgentConfig,
+  type: SubagentType,
+  options: SpawnOptions,
+): SubagentInvocation {
+  const model =
+    options.model ?? resolveModel(config.model, ctx.modelRegistry, ctx.model);
+  const requestedThinking =
+    options.thinkingLevel ??
+    config.thinking ??
+    SettingsManager.create(ctx.cwd, getAgentDir()).getDefaultThinkingLevel() ??
+    "medium";
+  const thinking = model ? clampThinkingLevel(model, requestedThinking) : "off";
+  return {
+    type,
+    description: options.description,
+    definitionPath: config.filePath,
+    model: {
+      value: model ? `${model.provider}/${model.id}` : "unavailable",
+      source: options.model
+        ? "tool override"
+        : config.model
+          ? "agent definition"
+          : "inherited/default",
+    },
+    thinking: {
+      value: thinking,
+      source: options.thinkingLevel
+        ? "tool override"
+        : config.thinking
+          ? "agent definition"
+          : "inherited/default",
+    },
+  };
+}
 
 interface QueuedSpawn {
   id: string;
@@ -76,7 +122,9 @@ export class SubagentManager {
       id,
       type,
       description: options.description,
+      invocation: resolveInvocation(ctx, config, type, options),
       status: options.isBackground ? "queued" : "running",
+      turns: 0,
       toolUses: 0,
       startedAt: Date.now(),
       abortController: new AbortController(),
@@ -130,6 +178,9 @@ export class SubagentManager {
     });
 
     record.promise = runChildSession(q.ctx, q.config, q.prompt, runOpts, {
+      onTurnEnd: (turns) => {
+        record.turns = turns;
+      },
       onToolActivity: (a) => {
         if (a.type === "end") record.toolUses++;
       },
@@ -143,6 +194,16 @@ export class SubagentManager {
       },
       onSessionCreated: (s) => {
         record.session = s;
+        // Capture the actual post-clamp runtime values, then persist a snapshot
+        // inside the child transcript for later /subagents browsing.
+        if (s.model) {
+          record.invocation.model.value = `${s.model.provider}/${s.model.id}`;
+        }
+        record.invocation.thinking.value = s.thinkingLevel;
+        s.sessionManager.appendCustomEntry(
+          SUBAGENT_INVOCATION_ENTRY,
+          record.invocation,
+        );
         // Flush steers that arrived before the session existed.
         if (record.pendingSteers?.length) {
           for (const m of record.pendingSteers) void s.steer(m).catch(() => {});
@@ -209,9 +270,10 @@ export class SubagentManager {
     return true;
   }
 
-  abort(id: string): boolean {
+  abort(id: string, opts?: { userAborted?: boolean }): boolean {
     const record = this.agents.get(id);
     if (!record) return false;
+    if (opts?.userAborted) record.userAborted = true;
     if (record.status === "queued") {
       this.queue = this.queue.filter((q) => q.id !== id);
       record.status = "stopped";

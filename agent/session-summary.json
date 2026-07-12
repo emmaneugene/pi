@@ -1,6 +1,6 @@
 {
-  "provider": "opencode-go",
-  "model": "deepseek-v4-flash",
+  "provider": "openai-codex",
+  "model": "gpt-5.6-luna",
   "maxTokens": 300,
   "timeoutSeconds": 10,
   "verbose": true,

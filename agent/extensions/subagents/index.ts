@@ -3,11 +3,12 @@
  *
  * Tools: subagent · get_subagent_result · steer_subagent
  * Tool access: explicit allowlist per agent type.
- * Wires the registry, manager, tools, /agents command, and completion notices.
+ * Wires the registry, manager, tools, slash commands, and completion notices.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { showAgentsMenu } from "./agents-menu.ts";
+import { showAgentsCatalog } from "./agents-catalog.ts";
+import { showSessionSubagents } from "./agents-menu.ts";
 import { loadState, saveState, STATE_FILE } from "./config.ts";
 import { SubagentManager } from "./manager.ts";
 import { AgentRegistry } from "./registry.ts";
@@ -15,7 +16,7 @@ import { registerTools, SUBAGENT_TOOL_NAMES } from "./tools.ts";
 
 const MAX_CONCURRENT = 4;
 const DISABLED_MESSAGE =
-  "Subagents are disabled. Run /subagents to enable them.";
+  "Subagents are disabled. Run /toggle-subagents to enable them.";
 
 function syncSubagentTools(pi: ExtensionAPI, enabled: boolean): void {
   try {
@@ -47,9 +48,11 @@ export default function (pi: ExtensionAPI) {
         record.status === "error" ||
         record.status === "aborted" ||
         record.status === "stopped";
-      const summary = isError
-        ? `Background agent "${record.description}" ${record.status}: ${record.error ?? "stopped"}.`
-        : `Background agent "${record.description}" completed (${record.toolUses} tool uses).\n\n${record.result ?? "No output."}\n\nUse get_subagent_result for full output.`;
+      const summary = record.userAborted
+        ? `Background agent "${record.description}" was aborted by the user. Do not relaunch it unless asked.`
+        : isError
+          ? `Background agent "${record.description}" ${record.status}: ${record.error ?? "stopped"}.`
+          : `Background agent "${record.description}" completed (${record.toolUses} tool uses).\n\n${record.result ?? "No output."}\n\nUse get_subagent_result for full output.`;
       pi.sendMessage(
         {
           customType: "subagent-notification",
@@ -64,7 +67,7 @@ export default function (pi: ExtensionAPI) {
   registerTools(pi, manager, registry, isEnabled);
   syncSubagentTools(pi, enabled);
 
-  pi.registerCommand("subagents", {
+  pi.registerCommand("toggle-subagents", {
     description: "Toggle subagents on/off",
     handler: async (_args, ctx) => {
       enabled = !enabled;
@@ -80,16 +83,27 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  // /agents — interactive: list this session's subagents (live + on-disk),
-  // view a transcript, or stop a running one.
-  pi.registerCommand("agents", {
-    description: "List and inspect this session's subagents",
+  // /subagents — list this session's subagents (live + on-disk) in the catalog.
+  // Enter opens the live read-only session viewer; the external-editor key
+  // retains the rendered transcript editor flow.
+  pi.registerCommand("subagents", {
+    description: "List this session's subagents and view live transcripts",
     handler: async (_args, ctx) => {
       if (!isEnabled()) {
         ctx.ui.notify(DISABLED_MESSAGE, "warning");
         return;
       }
-      await showAgentsMenu(ctx, manager);
+      await showSessionSubagents(ctx, manager);
+    },
+  });
+
+  // /show-subagents — read-only catalog of available subagent types and their
+  // config (context, tools, model, thinking, prompt mode). Parallel to
+  // /show-skills and /show-tools.
+  pi.registerCommand("show-subagents", {
+    description: "Show subagent types available to the agent in this session",
+    handler: async (_args, ctx) => {
+      await showAgentsCatalog(ctx, registry);
     },
   });
 

@@ -54,7 +54,7 @@ const detectSequence = (env = process.env): NotifySequence => {
  */
 const notifyBinary = (message: string): void => {
   try {
-    const child = spawn("notif", [message], { stdio: "ignore" });
+    const child = spawn("notif", ["--persist", message], { stdio: "ignore" });
     child.on("error", () => {});
     child.unref();
   } catch {}

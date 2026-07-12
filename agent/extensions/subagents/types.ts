@@ -5,13 +5,35 @@
  * and static tool allowlists. No worktrees, scheduling, memory, or RPC.
  */
 
-import type { Model, ThinkingLevel } from "@earendil-works/pi-ai";
+import type { Model, ThinkingLevel } from "@earendil-works/pi-ai/compat";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 
 export type { ThinkingLevel };
 
-/** Agent type name, backed by a global or project .pi/agents/<name>.md file. */
+/** Agent type name, backed by a global or project agent markdown file. */
 export type SubagentType = string;
+
+/** Where an effective invocation setting came from. */
+export type InvocationSettingSource =
+  "tool override" | "agent definition" | "inherited/default" | "unknown";
+
+/** One effective invocation setting plus its provenance. */
+export interface InvocationSetting {
+  value: string;
+  source: InvocationSettingSource;
+}
+
+/** Resolved execution metadata captured when a subagent is spawned. */
+export interface SubagentInvocation {
+  type: SubagentType;
+  description: string;
+  definitionPath?: string;
+  model: InvocationSetting;
+  thinking: InvocationSetting;
+}
+
+/** Custom child-session entry used to persist exact invocation metadata. */
+export const SUBAGENT_INVOCATION_ENTRY = "subagent-invocation";
 
 /** Agent run state. */
 export type SubagentStatus =
@@ -28,6 +50,8 @@ export type SubagentStatus =
  */
 export interface AgentConfig {
   name: string;
+  /** Absolute path to the agents/<name>.md definition file. */
+  filePath: string;
   displayName?: string;
   description: string;
   allowTools: string[];
@@ -60,9 +84,12 @@ export interface AgentRecord {
   id: string;
   type: SubagentType;
   description: string;
+  invocation: SubagentInvocation;
   status: SubagentStatus;
   result?: string;
   error?: string;
+  /** Completed model turns in this child session. */
+  turns: number;
   toolUses: number;
   startedAt: number;
   completedAt?: number;
@@ -74,6 +101,9 @@ export interface AgentRecord {
   lifetimeUsage: LifetimeUsage;
   /** Path to the persisted transcript JSONL, for audit. */
   transcriptFile?: string;
+  /** Set when the user stops the agent themselves (e.g. ctrl+x in /subagents),
+   *  so the completion follow-up says so instead of looking like a failure. */
+  userAborted?: boolean;
 }
 
 /** Per-spawn options handed to the manager. */

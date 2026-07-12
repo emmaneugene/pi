@@ -1,12 +1,8 @@
-import { DynamicBorder, type ExtensionAPI, type ToolInfo } from "@earendil-works/pi-coding-agent";
 import {
-  Container,
-  Spacer,
-  Text,
-  truncateToWidth,
-  visibleWidth,
-  wrapTextWithAnsi,
-} from "@earendil-works/pi-tui";
+  type ExtensionAPI,
+  type ToolInfo,
+} from "@earendil-works/pi-coding-agent";
+import { showCatalog, type CatalogEntry } from "../lib/tui/picker.ts";
 
 const sourceLabel = (tool: ToolInfo): string => {
   const source = tool.sourceInfo?.source;
@@ -15,102 +11,67 @@ const sourceLabel = (tool: ToolInfo): string => {
   return "extension";
 };
 
-type ToolRow = {
-  name: string;
-  source: string;
-  active: boolean;
-  description: string;
-};
-
-const makeToolRows = (tools: ToolInfo[], activeNames: Set<string>): ToolRow[] =>
-  tools.map((tool) => ({
-    name: tool.name,
-    source: sourceLabel(tool),
-    active: activeNames.has(tool.name),
-    description: tool.description?.trim() || "No description",
-  }));
-
-const padToWidth = (text: string, width: number): string =>
-  text + " ".repeat(Math.max(0, width - visibleWidth(text)));
-
-const renderDescription = (description: string, width: number): string[] => {
-  const lines = description.replace(/\r\n/g, "\n").split("\n");
-  const rendered = lines.flatMap((line) => {
-    if (line.trim() === "") return [""];
-    return wrapTextWithAnsi(line.trim(), width);
-  });
-  return rendered.length > 0 ? rendered : ["No description"];
-};
-
-const renderToolsTable = (rows: ToolRow[], width: number, theme: any): string[] => {
-  if (rows.length === 0) return [" No tools registered."];
-
-  const availableWidth = Math.max(40, width - 4);
-  const maxLabelWidth = Math.max(
-    "Name".length,
-    ...rows.map((row) => visibleWidth(`${row.name}(${row.source}) ${row.active ? "✔" : "✘"}`)),
-  );
-  const nameWidth = Math.min(34, Math.max(10, maxLabelWidth));
-  const descriptionWidth = Math.max(20, availableWidth - nameWidth - 7);
-  const topRule = ` ┌${"─".repeat(nameWidth + 2)}┬${"─".repeat(descriptionWidth + 2)}┐`;
-  const midRule = ` ├${"─".repeat(nameWidth + 2)}┼${"─".repeat(descriptionWidth + 2)}┤`;
-  const bottomRule = ` └${"─".repeat(nameWidth + 2)}┴${"─".repeat(descriptionWidth + 2)}┘`;
-  const output = [
-    topRule,
-    ` │ ${padToWidth("Name", nameWidth)} │ ${padToWidth("Description", descriptionWidth)} │`,
-    midRule,
+/** Render every available detail of a tool into a markdown artefact. */
+const toolDoc = (tool: ToolInfo, active: boolean): string => {
+  const guidelines = tool.promptGuidelines ?? [];
+  const lines: string[] = [
+    `# ${tool.name}`,
+    "",
+    `- source: ${sourceLabel(tool)}`,
+    `- active: ${active ? "yes" : "no"}`,
+    "",
+    "## Description",
+    "",
+    tool.description?.trim() || "No description",
+    "",
   ];
-
-  for (const row of rows) {
-    const active = row.active ? theme.fg("success", "✔") : theme.fg("error", "✘");
-    const label = `${truncateToWidth(`${row.name}(${row.source})`, nameWidth - 2)} ${active}`;
-    const labelCell = padToWidth(label, nameWidth);
-    const descriptionLines = renderDescription(row.description, descriptionWidth);
-
-    descriptionLines.forEach((descriptionLine, index) => {
-      output.push(
-        ` │ ${index === 0 ? labelCell : " ".repeat(nameWidth)} │ ${padToWidth(descriptionLine, descriptionWidth)} │`,
-      );
-    });
-    output.push(midRule);
+  if (guidelines.length > 0) {
+    lines.push(
+      "## Prompt guidelines",
+      "",
+      ...guidelines.map((g) => `- ${g}`),
+      "",
+    );
   }
+  lines.push(
+    "## Parameters (schema)",
+    "",
+    "```json",
+    JSON.stringify(tool.parameters ?? {}, null, 2),
+    "```",
+    "",
+  );
+  return lines.join("\n");
+};
 
-  output[output.length - 1] = bottomRule;
-  return output.map((line) => (visibleWidth(line) > width ? truncateToWidth(line, width) : line));
+const toEntry = (tool: ToolInfo, active: boolean): CatalogEntry => {
+  const mark = active ? "✔" : "✘";
+  const oneLine = (tool.description?.trim() || "No description")
+    .replace(/\s+/g, " ")
+    .trim();
+  return {
+    item: {
+      value: tool.name,
+      label: tool.name,
+      description: `(${sourceLabel(tool)}) ${mark}  ${oneLine}`,
+    },
+    artifact: () => ({ content: toolDoc(tool, active), ext: ".md" }),
+  };
 };
 
 export default function (pi: ExtensionAPI) {
-  pi.registerMessageRenderer("tools-list", (message, _options, theme) => {
-    const rows = Array.isArray(message.details) ? (message.details as ToolRow[]) : [];
-    const container = new Container();
-    container.addChild(new DynamicBorder());
-    container.addChild(new Text(theme.bold(theme.fg("accent", "Tools")), 1, 0));
-    container.addChild(new Spacer(1));
-    container.addChild({
-      invalidate() {},
-      render(width) {
-        return renderToolsTable(rows, width, theme);
-      },
-    });
-    container.addChild(new DynamicBorder());
-    return container;
-  });
-
-  pi.registerCommand("tools", {
+  pi.registerCommand("show-tools", {
     description: "Show tools available to the agent in this session",
-    handler: async () => {
-      const allTools = pi.getAllTools();
+    handler: async (_args, ctx) => {
       const activeNames = new Set(pi.getActiveTools());
-      const tools = allTools.sort((a, b) => a.name.localeCompare(b.name));
+      const tools = pi
+        .getAllTools()
+        .sort((a, b) => a.name.localeCompare(b.name));
 
-      pi.sendMessage(
-        {
-          customType: "tools-list",
-          display: true,
-          content: "Tools",
-          details: makeToolRows(tools, activeNames),
-        },
-        { triggerTurn: false },
+      await showCatalog(
+        ctx,
+        "Tools",
+        tools.map((t) => toEntry(t, activeNames.has(t.name))),
       );
     },
   });

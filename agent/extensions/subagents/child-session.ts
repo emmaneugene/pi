@@ -4,7 +4,7 @@
 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Model } from "@earendil-works/pi-ai";
+import type { Model } from "@earendil-works/pi-ai/compat";
 import {
   type AgentSession,
   type AgentSessionEvent,
@@ -56,13 +56,19 @@ export interface RunResult {
 }
 
 /**
- * Persist child transcripts under the parent session's `subagents/` folder.
- * Falls back to a temp dir in headless mode.
+ * Persist child transcripts under `<sessionDir>/subagents/<parentSessionId>/`,
+ * so ownership is structural: every session's children live in their own
+ * folder rather than sharing a flat dir filtered by header. Falls back to a
+ * temp dir in headless mode (no parent dir / id available).
  */
-export function deriveChildSessionDir(ctx: ExtensionContext): string {
+export function deriveChildSessionDir(
+  ctx: ExtensionContext,
+  parentSessionId: string | undefined,
+): string {
   try {
     const parentDir = ctx.sessionManager?.getSessionDir?.();
-    if (parentDir) return join(parentDir, "subagents");
+    if (parentDir && parentSessionId)
+      return join(parentDir, "subagents", parentSessionId);
   } catch {
     // headless / --no-session: no parent dir available
   }
@@ -139,13 +145,13 @@ export async function runChildSession(
 
   // Child transcripts are pi-native JSONL, linked to the current session.
   // Headless mode falls back to a temp dir.
-  const sessionDir = deriveChildSessionDir(ctx);
   let parentSessionId: string | undefined;
   try {
     parentSessionId = ctx.sessionManager?.getSessionId?.();
   } catch {
     parentSessionId = undefined;
   }
+  const sessionDir = deriveChildSessionDir(ctx, parentSessionId);
   const sessionManager = SessionManager.create(cwd, sessionDir, {
     parentSession: parentSessionId,
   });

@@ -1,0 +1,24 @@
+{
+  "tools": {
+    "search": "brave",
+    "contents": "cloudflare"
+  },
+  "providers": {
+    "brave": {
+      "credentials": {
+        "search": "BRAVE_SEARCH_API_KEY"
+      }
+    },
+    "cloudflare": {
+      "credentials": {
+        "api": "CLOUDFLARE_API_TOKEN"
+      },
+      "accountId": "CLOUDFLARE_ACCOUNT_ID"
+    },
+    "exa": {
+      "credentials": {
+        "api": "EXA_API_KEY"
+      }
+    }
+  }
+}

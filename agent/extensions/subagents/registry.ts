@@ -1,11 +1,15 @@
 /**
- * registry.ts — Agent type registry: .pi/agents/*.md in the project and
- * global .pi/agents/*.md. Project overrides global.
+ * registry.ts — Agent type registry: project and global agent markdown files.
+ * Project overrides global.
  */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
+import {
+  CONFIG_DIR_NAME,
+  getAgentDir,
+  parseFrontmatter,
+} from "@earendil-works/pi-coding-agent";
 import { BUILTIN_TOOLS } from "./gating.ts";
 import type { AgentConfig, ThinkingLevel } from "./types.ts";
 
@@ -21,7 +25,7 @@ export class AgentRegistry {
     this.cwd = cwd;
     this.agents.clear();
     this.loadDir(join(dirname(getAgentDir()), "agents"), "global");
-    this.loadDir(join(cwd, ".pi", "agents"), "project");
+    this.loadDir(join(cwd, CONFIG_DIR_NAME, "agents"), "project");
   }
 
   /** Canonical (case-insensitive) key for a type name, or undefined. */
@@ -31,6 +35,13 @@ export class AgentRegistry {
     for (const key of this.agents.keys())
       if (key.toLowerCase() === lower) return key;
     return undefined;
+  }
+
+  /** All loaded configs (including disabled), sorted by name. For catalogs/UI. */
+  list(): AgentConfig[] {
+    return [...this.agents.values()].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
   }
 
   /** Enabled type names, for spawning + tool descriptions. */
@@ -75,6 +86,7 @@ export class AgentRegistry {
         parseFrontmatter<Record<string, unknown>>(content);
       this.agents.set(name, {
         name,
+        filePath: join(dir, file),
         displayName: str(fm.display_name),
         description: str(fm.description) ?? name,
         allowTools: parseTools(fm.tools),

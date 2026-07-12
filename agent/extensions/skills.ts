@@ -1,137 +1,67 @@
 import {
   DefaultResourceLoader,
-  DynamicBorder,
   type ExtensionAPI,
   getAgentDir,
   type Skill,
 } from "@earendil-works/pi-coding-agent";
-import {
-  Container,
-  Spacer,
-  Text,
-  truncateToWidth,
-  visibleWidth,
-  wrapTextWithAnsi,
-} from "@earendil-works/pi-tui";
-import { homedir } from "node:os";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { readJsonFile, writeJsonFile } from "../lib/json-state.ts";
+import { showCatalog, type CatalogEntry } from "../lib/tui/picker.ts";
 
-type SkillRow = {
-  name: string;
-  source: string;
-  invocable: boolean;
-  location: string;
-  description: string;
-};
+const STATE_FILE = join(getAgentDir(), "skill-inject.json");
 
-const tildify = (path: string): string => {
-  const home = homedir();
-  return path.startsWith(home) ? `~${path.slice(home.length)}` : path;
-};
+function loadState(): { enabled: boolean } {
+  const state = readJsonFile(STATE_FILE) as { enabled?: boolean } | undefined;
+  return { enabled: state?.enabled ?? true };
+}
 
-const makeSkillRows = (skills: Skill[]): SkillRow[] =>
-  skills.map((skill) => ({
-    name: skill.name,
-    source: skill.sourceInfo?.scope ?? skill.sourceInfo?.source ?? "user",
-    invocable: !skill.disableModelInvocation,
-    location: tildify(skill.filePath),
-    description: skill.description?.trim() || "No description",
-  }));
+function saveState(state: { enabled: boolean }): void {
+  writeJsonFile(STATE_FILE, state);
+}
 
-const padToWidth = (text: string, width: number): string =>
-  text + " ".repeat(Math.max(0, width - visibleWidth(text)));
+let injectSkills = loadState().enabled;
 
-const renderDescription = (
-  location: string,
-  description: string,
-  width: number,
-  theme: any,
-): string[] => {
-  const locLines = wrapTextWithAnsi(location, width).map((l) =>
-    theme.fg("muted", l),
-  );
-  const lines = description.replace(/\r\n/g, "\n").split("\n");
-  const descLines = lines.flatMap((line) => {
-    if (line.trim() === "") return [""];
-    return wrapTextWithAnsi(line.trim(), width);
-  });
-  return [
-    ...locLines,
-    ...(descLines.length > 0 ? descLines : ["No description"]),
-  ];
-};
+const sourceOf = (skill: Skill): string =>
+  skill.sourceInfo?.scope ?? skill.sourceInfo?.source ?? "user";
 
-const renderSkillsTable = (
-  rows: SkillRow[],
-  width: number,
-  theme: any,
-): string[] => {
-  if (rows.length === 0) return [" No skills registered."];
-
-  const availableWidth = Math.max(40, width - 4);
-  const maxLabelWidth = Math.max(
-    "Name".length,
-    ...rows.map((row) => visibleWidth(`${row.name}(${row.source}) ✔`)),
-  );
-  const nameWidth = Math.min(34, Math.max(10, maxLabelWidth));
-  const descriptionWidth = Math.max(20, availableWidth - nameWidth - 7);
-  const topRule = ` ┌${"─".repeat(nameWidth + 2)}┬${"─".repeat(descriptionWidth + 2)}┐`;
-  const midRule = ` ├${"─".repeat(nameWidth + 2)}┼${"─".repeat(descriptionWidth + 2)}┤`;
-  const bottomRule = ` └${"─".repeat(nameWidth + 2)}┴${"─".repeat(descriptionWidth + 2)}┘`;
-  const output = [
-    topRule,
-    ` │ ${padToWidth("Name", nameWidth)} │ ${padToWidth("Location & description", descriptionWidth)} │`,
-    midRule,
-  ];
-
-  for (const row of rows) {
-    const invocable = row.invocable
-      ? theme.fg("success", "✔")
-      : theme.fg("error", "✘");
-    const label = `${truncateToWidth(`${row.name}(${row.source})`, nameWidth - 2)} ${invocable}`;
-    const labelCell = padToWidth(label, nameWidth);
-    const descriptionLines = renderDescription(
-      row.location,
-      row.description,
-      descriptionWidth,
-      theme,
-    );
-
-    descriptionLines.forEach((descriptionLine, index) => {
-      output.push(
-        ` │ ${index === 0 ? labelCell : " ".repeat(nameWidth)} │ ${padToWidth(descriptionLine, descriptionWidth)} │`,
-      );
-    });
-    output.push(midRule);
-  }
-
-  output[output.length - 1] = bottomRule;
-  return output.map((line) =>
-    visibleWidth(line) > width ? truncateToWidth(line, width) : line,
-  );
+const toEntry = (skill: Skill): CatalogEntry => {
+  const invocable = !skill.disableModelInvocation;
+  const mark = invocable ? "✔" : "✘";
+  const oneLine = (skill.description?.trim() || "No description")
+    .replace(/\s+/g, " ")
+    .trim();
+  return {
+    item: {
+      value: skill.name,
+      label: skill.name,
+      description: `(${sourceOf(skill)}) ${mark}  ${oneLine}`,
+    },
+    // The artefact is the full SKILL.md.
+    artifact: () => ({
+      path: skill.filePath,
+      content: readFileSync(skill.filePath, "utf-8"),
+      ext: ".md",
+    }),
+  };
 };
 
 export default function (pi: ExtensionAPI) {
-  pi.registerMessageRenderer("skills-list", (message, _options, theme) => {
-    const rows = Array.isArray(message.details)
-      ? (message.details as SkillRow[])
-      : [];
-    const container = new Container();
-    container.addChild(new DynamicBorder());
-    container.addChild(
-      new Text(theme.bold(theme.fg("accent", "Skills")), 1, 0),
-    );
-    container.addChild(new Spacer(1));
-    container.addChild({
-      invalidate() {},
-      render(width) {
-        return renderSkillsTable(rows, width, theme);
-      },
-    });
-    container.addChild(new DynamicBorder());
-    return container;
+  pi.registerCommand("skill-inject", {
+    description: "Toggle skill metadata injection in system prompt",
+    handler: async (_args, ctx) => {
+      injectSkills = !injectSkills;
+      saveState({ enabled: injectSkills });
+      ctx.ui.notify(
+        injectSkills
+          ? "Skill metadata will be injected to system prompt"
+          : "Skill metadata hidden from system prompt",
+        "info",
+      );
+    },
   });
 
-  pi.registerCommand("skills", {
+  pi.registerCommand("show-skills", {
     description: "Show skills available to the agent in this session",
     handler: async (_args, ctx) => {
       // Use the full resource loader so npm-package skills (resolved via the
@@ -147,15 +77,23 @@ export default function (pi: ExtensionAPI) {
         .slice()
         .sort((a, b) => a.name.localeCompare(b.name));
 
-      pi.sendMessage(
-        {
-          customType: "skills-list",
-          display: true,
-          content: "Skills",
-          details: makeSkillRows(sorted),
-        },
-        { triggerTurn: false },
-      );
+      await showCatalog(ctx, "Skills", sorted.map(toEntry));
     },
+  });
+
+  pi.on("before_agent_start", async (event) => {
+    if (injectSkills) return;
+
+    const { systemPrompt } = event;
+
+    // Strip skill metadata using its semantic prompt boundary.
+    const cleaned = systemPrompt.replace(
+      /\n?<available_skills>[\s\S]*?<\/available_skills>\n?/,
+      "",
+    );
+
+    if (cleaned !== systemPrompt) {
+      return { systemPrompt: cleaned };
+    }
   });
 }

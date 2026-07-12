@@ -2,7 +2,8 @@
 description: Fast read-only search agent for locating code - find files, grep symbols, answer where-is-X. Read-only — no file edits.
 display_name: Explore
 tools: read, bash
-model: opencode-go/deepseek-v4-flash
+model: openrouter/deepseek/deepseek-v4-flash
+thinking: high
 prompt_mode: replace
 ---
 

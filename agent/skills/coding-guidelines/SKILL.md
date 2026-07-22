@@ -1,6 +1,7 @@
 ---
 name: coding-guidelines
 description: Preferred approach to designing and writing code. Use when authoring or refactoring non-trivial code (new modules, services, adapters, error handling, domain types) and when asked to review code against these standards ("review this diff", "does this follow our standards", "critique this design").
+disable-model-invocation: false
 source: adapted from https://gist.github.com/dmmulroy/9c80f1f499b031aa0b6525b5d9ae25f0 and https://github.com/tigerbeetle/tigerbeetle/blob/main/docs/TIGER_STYLE.md
 ---
 

@@ -1,19 +1,22 @@
 ---
 name: handoff
-description: "Create a durable HANDOFF.md for a repo or working directory that captures current context, decisions, touched files, current state, and the next task. Use when wrapping up work, pausing a thread, or preparing someone (or a future session) to continue."
+description: "Create a durable handoff document that captures current context, decisions, touched files, current state, and the next task, copied to the clipboard by default. Use when wrapping up work, pausing a thread, or preparing someone (or a future session) to continue."
+disable-model-invocation: false
 ---
 
 # Handoff
 
 Use this skill when the user wants a durable written handoff.
 
-The main output of this skill is a `HANDOFF.md` file.
+The main output of this skill is a handoff document in Markdown.
 
-## Output location
+## Output destination
 
-Choose the output path in this order:
+By default, copy the handoff to the clipboard instead of creating a file: write it to a temp file and pipe it with `clippy` (`clippy < "$TMPDIR/handoff.md"`).
 
-1. An explicit user-provided path, if they gave one.
+Write a file only when the user asks for one. Then choose the path in this order:
+
+1. An explicit user-provided path.
 2. `HANDOFF.md` at the git repo root, if the current working directory is inside a git repository.
 3. Otherwise `HANDOFF.md` in the current working directory.
 
@@ -41,8 +44,8 @@ Use the template in `template.md`.
 3. Prefer concrete bullets over long prose.
 4. Preserve important decisions, constraints, caveats, and file paths exactly.
 5. Make `## Next Task` actionable enough that a new session could start from it immediately.
-6. Write the final result to the selected output path.
-7. After writing, give the user a short summary of what was captured and where the file was written.
+6. Deliver the final result: copy to the clipboard by default, or write to the selected path if the user asked for a file.
+7. Afterwards, give the user a short summary of what was captured and where it went (clipboard or file path).
 
 ## Tailoring
 

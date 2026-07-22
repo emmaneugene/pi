@@ -6,11 +6,12 @@
     <title>CI/CD Pipeline — Reference Template</title>
     <!--
   Reference template for the visual-explainer skill: Mermaid diagrams.
-  Teal/cyan palette — distinctly different from terracotta (architecture)
-  and rose (data-table) templates so agents absorb variety.
+  Unified cool-slate scheme (grey #f6f7f9 page, white surfaces, navy #10192b text,
+  muted teal/amber/blue/red/green accents) shared across every template; templates
+  differ by typography and layout, not color. See references/css-patterns.md.
   Key patterns demonstrated:
-  - Teal/cyan palette (NOT indigo/violet)
-  - Dot-grid background atmosphere (different from radial gradient)
+  - Shared cool-slate palette (teal-led accents; see css-patterns Theme Setup)
+  - Plain white background; depth via borders and surfaces, not texture
   - Large heading (38px) for typographic contrast
   - ESM import of Mermaid + @mermaid-js/layout-elk
   - Mermaid theme: 'base' + full themeVariables, fontSize: 16px
@@ -33,17 +34,17 @@
         --font-body: "Bricolage Grotesque", system-ui, sans-serif;
         --font-mono: "Fragment Mono", "SF Mono", Consolas, monospace;
 
-        --bg: #f0fdfa;
+        --bg: #f6f7f9;
         --surface: #ffffff;
-        --border: rgba(0, 0, 0, 0.07);
-        --text: #134e4a;
-        --text-dim: #5f8a85;
+        --border: rgba(15, 23, 42, 0.09);
+        --text: #10192b;
+        --text-dim: #5b6472;
 
-        --primary: #0d9488;
-        --primary-dim: rgba(13, 148, 136, 0.08);
-        --secondary: #0369a1;
-        --tertiary: #d97706;
-        --danger: #dc2626;
+        --primary: #0f766e;
+        --primary-dim: rgba(15, 118, 110, 0.1);
+        --secondary: #1d4ed8;
+        --tertiary: #b45309;
+        --danger: #b91c1c;
       }
 
       /* Light mode is the default. Add a `@media (prefers-color-scheme: dark)`
@@ -59,12 +60,6 @@
 
       body {
         background-color: var(--bg);
-        background-image: radial-gradient(
-          circle,
-          var(--border) 1px,
-          transparent 1px
-        );
-        background-size: 24px 24px;
         color: var(--text);
         font-family: var(--font-body);
         padding: 40px;
@@ -448,19 +443,19 @@
         themeVariables: {
           fontFamily: "'Bricolage Grotesque', system-ui, sans-serif",
           fontSize: "16px",
-          primaryColor: isDark ? "#115e59" : "#ccfbf1",
-          primaryBorderColor: isDark ? "#2dd4bf" : "#0d9488",
-          primaryTextColor: isDark ? "#ccfbf1" : "#134e4a",
-          secondaryColor: isDark ? "#0c4a6e" : "#e0f2fe",
-          secondaryBorderColor: isDark ? "#38bdf8" : "#0369a1",
-          secondaryTextColor: isDark ? "#ccfbf1" : "#134e4a",
-          tertiaryColor: isDark ? "#2e2618" : "#fffbeb",
-          tertiaryBorderColor: isDark ? "#fbbf24" : "#d97706",
-          tertiaryTextColor: isDark ? "#ccfbf1" : "#134e4a",
-          lineColor: isDark ? "#5eead4" : "#5f8a85",
-          noteBkgColor: isDark ? "#115e59" : "#fefce8",
-          noteTextColor: isDark ? "#ccfbf1" : "#134e4a",
-          noteBorderColor: isDark ? "#fbbf24" : "#d97706",
+          primaryColor: isDark ? "#115e59" : "#d5efec",
+          primaryBorderColor: isDark ? "#2dd4bf" : "#0f766e",
+          primaryTextColor: isDark ? "#ccfbf1" : "#10192b",
+          secondaryColor: isDark ? "#0c4a6e" : "#e7edfb",
+          secondaryBorderColor: isDark ? "#38bdf8" : "#1d4ed8",
+          secondaryTextColor: isDark ? "#ccfbf1" : "#10192b",
+          tertiaryColor: isDark ? "#2e2618" : "#f7ecd9",
+          tertiaryBorderColor: isDark ? "#fbbf24" : "#b45309",
+          tertiaryTextColor: isDark ? "#ccfbf1" : "#10192b",
+          lineColor: isDark ? "#5eead4" : "#5b6472",
+          noteBkgColor: isDark ? "#115e59" : "#f7ecd9",
+          noteTextColor: isDark ? "#ccfbf1" : "#10192b",
+          noteBorderColor: isDark ? "#fbbf24" : "#b45309",
         },
       });
 
@@ -633,7 +628,7 @@
 
           // Use the same isDark value that was used to render the Mermaid theme
           // This ensures the background matches the baked-in SVG colors
-          const bg = isDark ? "#042f2e" : "#f0fdfa";
+          const bg = isDark ? "#042f2e" : "#f6f7f9";
 
           const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">

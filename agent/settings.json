@@ -1,7 +1,7 @@
 {
-  "lastChangelogVersion": "0.80.6",
-  "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-5.6-terra",
+  "lastChangelogVersion": "0.81.1",
+  "defaultProvider": "cursor",
+  "defaultModel": "composer-2.5",
   "hideThinkingBlock": false,
   "defaultThinkingLevel": "medium",
   "enabledModels": [
@@ -16,7 +16,9 @@
     "openrouter/moonshotai/kimi-k2.6",
     "openrouter/moonshotai/kimi-k2.7-code",
     "openrouter/deepseek/deepseek-v4-flash",
-    "openrouter/deepseek/deepseek-v4-pro"
+    "openrouter/deepseek/deepseek-v4-pro",
+    "cursor/grok-4.5",
+    "cursor/composer-2-5"
   ],
   "skills": ["~/.agents/skills"],
   "shellPath": "/bin/zsh",
@@ -25,7 +27,8 @@
     "npm:@marckrenn/pi-sub-bar",
     "npm:@plannotator/pi-extension@0.22.0",
     "npm:@gotgenes/pi-anthropic-auth",
-    "npm:pi-web-providers"
+    "npm:pi-web-providers",
+    "npm:pi-cursor-sdk"
   ],
   "doubleEscapeAction": "tree",
   "treeFilterMode": "no-tools",

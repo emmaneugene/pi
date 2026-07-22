@@ -12,7 +12,7 @@ When rules pull in different directions, use this order:
 4. Avoid broad migrations unless explicitly requested.
 5. Document meaningful trade-offs with comments or ADRs.
 
-New code paths, modules, adapters, and services should follow these standards. Do not force a whole-project migration for an unrelated change.
+Before adding a new pattern or library, inspect the repo for existing choices around error handling, schema parsing, dependency injection, testing, observability, adapters, and module layout. If existing code uses exception-style errors, do not rewrite the whole system: new code may use typed results internally, but it must integrate with the existing framework handlers, logging, tracing, and error reporting. At boundaries, translate between local typed errors and whatever the framework expects. Do not force a whole-project migration for an unrelated change.
 
 ## Core principles
 
@@ -26,14 +26,6 @@ New code paths, modules, adapters, and services should follow these standards. D
 - Design deep, cohesive modules with low caller burden.
 - Test behavior through real seams; avoid module mocks and spy-driven tests.
 - Keep code discoverable for humans and agents.
-
-## Adapting to existing codebases
-
-Before adding a new pattern or library, inspect the repo for existing choices around error handling, schema parsing, dependency injection, testing, observability, adapters and services, and module layout.
-
-Prefer consistency inside the codebase. If existing code uses exception-style errors, do not rewrite the whole system. New code may still use typed results internally, but it must integrate with the existing framework handlers, logging, tracing, metrics, and error reporting.
-
-At boundaries, translate between local typed errors and whatever the framework or existing code expects.
 
 ## Errors and failures
 
@@ -257,27 +249,6 @@ Enable the strictest practical compiler and static-analysis diagnostics for the 
 Avoid mutable singletons and global state; constants and pure lookup tables are fine. Inject clock and randomness into dependency-bearing modules; pure domain functions may take an explicit `now` or random value.
 
 When code exposes raw buffers, serialized records, native layouts, cryptographic material, or foreign-function interfaces, initialize the full region that may be observed. Clear unused bytes and padding where they could leak sensitive data or break deterministic output. Test encoded lengths and buffer boundaries, including partially filled buffers.
-
-## Quick checklist
-
-Before coding:
-
-- Read existing conventions for errors, schemas, tests, adapters, telemetry, and module layout.
-- Look for existing domain modules and types before creating new ones.
-- Look for existing adapters and services before creating a new one.
-- Parse inputs at the edge; use domain types internally.
-- Avoid raw DTOs, raw IDs, nullable bags, and partial-input types in core and application logic.
-- Bound queues, retries, batches, payloads, concurrency, recursion, and memory growth.
-- Encode critical preconditions, postconditions, and invariants as assertions.
-- Estimate network, disk, memory, and CPU costs before fixing the architecture.
-- Keep checks and declarations close to use; avoid duplicate mutable state.
-- Distinguish indexes, counts, sizes, units, and rounding behavior.
-- Prefer typed errors as values for new expected failures.
-- Preserve existing observability and error mechanics.
-- Test valid, invalid, boundary, and error-handling behavior through real seams.
-- Enable strict compiler and static-analysis diagnostics.
-- Document exported symbols.
-- Add an ADR for a meaningful new adapter or service created after an adapter reuse audit.
 
 ## Review output format
 

@@ -1,6 +1,7 @@
 ---
 name: visual-explainer
 description: Generate self-contained HTML visual explanations for systems, code changes, plans, data, and technical concepts. Use for diagrams, architecture overviews, diff or plan reviews, project recaps, comparison tables, slide decks, and other visual explanations.
+disable-model-invocation: false
 source: https://github.com/nicobailon/visual-explainer/blob/main/plugins/visual-explainer
 ---
 
@@ -14,16 +15,17 @@ Generate self-contained HTML pages that explain systems, code changes, plans, da
 
 Read only the references needed for the current output:
 
-| Need                                                                                                          | Read                                                                                                   |
-| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Text-heavy architecture/cards                                                                                 | `./templates/architecture.html`                                                                        |
-| Mermaid flowcharts, sequence, ER, state, class, C4, data flow                                                 | `./templates/mermaid-flowchart.html`, Mermaid sections in `./references/libraries.md`                  |
-| Data tables, comparisons, audits                                                                              | `./templates/data-table.html`                                                                          |
-| Slide decks                                                                                                   | `./templates/slide-deck.html`, `./references/slide-patterns.md`                                        |
-| CSS layout, overflow, depth, collapsibles, SVG connectors                                                     | `./references/css-patterns.md`                                                                         |
-| Before/after diffs, bespoke non-Mermaid diagrams (cross-section, mass, call-graph collapse, hand-built boxes) | "Before / After Panels" and "Bespoke (non-Mermaid) Diagram Patterns" in `./references/css-patterns.md` |
-| Pages with 4+ major sections                                                                                  | `./references/responsive-nav.md`                                                                       |
-| Prose-heavy pages                                                                                             | “Prose Page Elements” in `css-patterns.md`, typography sections in `libraries.md`                      |
+| Need                                                                                                                  | Read                                                                                                   |
+| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Narrative explainer of a change/system (Background → Intuition → Walkthrough → Quiz), scrollspy TOC, interactive quiz | `./templates/explainer-page.html`                                                                      |
+| Text-heavy architecture/cards                                                                                         | `./templates/architecture.html`                                                                        |
+| Mermaid flowcharts, sequence, ER, state, class, C4, data flow                                                         | `./templates/mermaid-flowchart.html`, Mermaid sections in `./references/libraries.md`                  |
+| Data tables, comparisons, audits                                                                                      | `./templates/data-table.html`                                                                          |
+| Slide decks                                                                                                           | `./templates/slide-deck.html`, `./references/slide-patterns.md`                                        |
+| CSS layout, overflow, depth, collapsibles, SVG connectors                                                             | `./references/css-patterns.md`                                                                         |
+| Before/after diffs, bespoke non-Mermaid diagrams (cross-section, mass, call-graph collapse, hand-built boxes)         | "Before / After Panels" and "Bespoke (non-Mermaid) Diagram Patterns" in `./references/css-patterns.md` |
+| Pages with 4+ major sections                                                                                          | `./references/responsive-nav.md`                                                                       |
+| Prose-heavy pages                                                                                                     | “Prose Page Elements” in `css-patterns.md`, typography sections in `libraries.md`                      |
 
 ## Choose the representation
 
@@ -69,7 +71,7 @@ For before/after reviews, the two-column diff is the centerpiece of the card, no
 
 ## Explainer-page mode (teaching a change or system)
 
-When the goal is understanding — explaining a diff, PR, or unfamiliar system in depth — structure the page as a narrative, not a card grid:
+When the goal is understanding — explaining a diff, PR, or unfamiliar system in depth — structure the page as a narrative, not a card grid. Start from `./templates/explainer-page.html` (paper/blueprint palette; sticky scrollspy TOC, collapsible primer, interactive trace diagram, before/after panels, and a JS-driven quiz already wired):
 
 - **Sections**: Background → Intuition → Walkthrough → Quiz, with a table of contents. One long scrollable page; no top-level tabs.
 - **Background**: broad primer for beginners inside a collapsible `<details>` (skippable), then the narrow context directly relevant to the change. Explore surrounding code first.
@@ -84,9 +86,10 @@ When the goal is understanding — explaining a diff, PR, or unfamiliar system i
 
 - Use semantic HTML where it helps accessibility and copy/paste: `<table>`, headings, lists, `<details>`, captions.
 - Use CSS custom properties for palette: `--bg`, `--surface`, `--border`, `--text`, `--text-dim`, and 3–5 accents.
-- Default to a light-mode palette: light `--bg`/`--surface` with dark `--text`. Do not emit a `@media (prefers-color-scheme: dark)` override, OS-adaptive auto-switching, or `isDark` detection by default. Add a dark or adaptive theme only when the user explicitly asks; when you do, keep light as the `:root` default and layer dark on top.
+- Default to the unified cool-slate palette: a **plain `--bg` (`#f6f7f9`)**, white `--surface`, navy `--text` (`#10192b`), slate `--text-dim` (`#5b6472`), low-alpha cool borders, and muted jewel-tone accents led by teal `#0f766e` (plus amber `#b45309`, blue `#1d4ed8`, red `#b91c1c`, green `#15803d`). The grey page against white surfaces gives cards definition without gradients. Full token set in `references/css-patterns.md` Theme Setup. Do not emit a `@media (prefers-color-scheme: dark)` override, OS-adaptive auto-switching, or `isDark` detection by default. Add a dark or adaptive theme only when the user explicitly asks; when you do, keep light as the `:root` default and layer dark on top.
 - Pick a clear aesthetic direction before writing: blueprint, editorial, paper/ink, terminal, IDE-inspired, or data-dense.
-- Avoid generic defaults: no body font that is only Inter, Roboto, Arial, Helvetica, or system-ui; no violet/fuchsia Tailwind-default accents as the main palette (`#8b5cf6`, `#7c3aed`, `#a78bfa`, `#d946ef`); no cyan+magenta+purple neon dashboard; no decorative gradient-mesh blobs (a subtle 2–3 radial atmosphere is fine).
+- Keep backgrounds plain: a flat cool-slate page (`#f6f7f9`) with white surfaces, no gradient glows, dot grids, or gradient-mesh blobs. Create depth with the grey/white contrast plus borders, spacing, and subtle shadows on surfaces, not background decoration. A gradient is fine only when functional (e.g. a scrim over a photo for legibility). Simplicity and readability come first.
+- Avoid generic defaults: no body font that is only Inter, Roboto, Arial, Helvetica, or system-ui; no violet/fuchsia Tailwind-default accents as the main palette (`#8b5cf6`, `#7c3aed`, `#a78bfa`, `#d946ef`); no cyan+magenta+purple neon dashboard.
 - Good font pair families: DM Sans + Fira Code; Instrument Serif + JetBrains Mono; IBM Plex Sans + IBM Plex Mono; Bricolage Grotesque + Fragment Mono; Plus Jakarta Sans + Azeret Mono.
 - Good accent directions: terracotta+sage, teal+slate, rose+cranberry, amber+emerald, deep blue+gold.
 - Prevent overflow: `min-width: 0` on grid/flex children, `overflow-wrap: break-word` for long text, and scroll containers for wide tables/code.

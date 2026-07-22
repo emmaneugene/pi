@@ -6,10 +6,11 @@
     <title>Requirements Audit — Reference Template</title>
     <!--
   Reference template for the visual-explainer skill: data tables.
-  Rose/cranberry palette — distinctly different from terracotta (architecture)
-  and teal (mermaid) templates so agents absorb variety.
+  Unified cool-slate scheme (grey #f6f7f9 page, white surfaces, navy #10192b text,
+  muted teal/amber/blue/red/green accents) shared across every template; templates
+  differ by typography and layout, not color. See references/css-patterns.md.
   Key patterns demonstrated:
-  - Rose/cranberry palette (NOT indigo/violet)
+  - Shared cool-slate palette (teal-led accents; see css-patterns Theme Setup)
   - KPI summary cards above the table (visual hook before the data)
   - Collapsible <details> section (replaces static callout)
   - Depth tiers: elevated KPIs, default table, collapsible for secondary
@@ -34,22 +35,22 @@
         --font-mono: "JetBrains Mono", "SF Mono", Consolas, monospace;
         --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
 
-        --bg: #fff5f5;
+        --bg: #f6f7f9;
         --surface: #ffffff;
-        --surface2: #fef0ee;
-        --surface-elevated: #fff8f7;
-        --border: rgba(0, 0, 0, 0.07);
-        --border-bright: rgba(0, 0, 0, 0.14);
-        --text: #1c1917;
-        --text-dim: #78716c;
-        --accent: #be123c;
-        --accent-dim: rgba(190, 18, 60, 0.06);
-        --green: #16a34a;
-        --green-dim: rgba(22, 163, 74, 0.08);
-        --red: #dc2626;
-        --red-dim: rgba(220, 38, 38, 0.08);
-        --orange: #d97706;
-        --orange-dim: rgba(217, 119, 6, 0.08);
+        --surface2: #eef0f3;
+        --surface-elevated: #ffffff;
+        --border: rgba(15, 23, 42, 0.09);
+        --border-bright: rgba(15, 23, 42, 0.18);
+        --text: #10192b;
+        --text-dim: #5b6472;
+        --accent: #0f766e;
+        --accent-dim: rgba(15, 118, 110, 0.1);
+        --green: #15803d;
+        --green-dim: rgba(21, 128, 61, 0.09);
+        --red: #b91c1c;
+        --red-dim: rgba(185, 28, 28, 0.08);
+        --orange: #b45309;
+        --orange-dim: rgba(180, 83, 9, 0.1);
       }
 
       /* Light mode is the default. Add a `@media (prefers-color-scheme: dark)`
@@ -65,17 +66,6 @@
 
       body {
         background: var(--bg);
-        background-image:
-          radial-gradient(
-            ellipse at 30% 0%,
-            var(--accent-dim) 0%,
-            transparent 50%
-          ),
-          radial-gradient(
-            ellipse at 70% 100%,
-            var(--green-dim) 0%,
-            transparent 40%
-          );
         color: var(--text);
         font-family: var(--font-sans);
         padding: 40px;

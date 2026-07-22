@@ -1,43 +1,39 @@
 ---
 name: pi-documentation
-description: Consult the installed Pi documentation and examples. Use when the user asks about Pi itself, its SDK, extensions, themes, skills, prompt templates, TUI, keybindings, providers, models, packages, or configuration.
+description: Consult the documentation, examples, and public API declarations bundled with the active Pi installation. Use whenever a task concerns Pi itself, including its CLI, configuration, resources, extension APIs, SDK, TUI, providers, sessions, or other current and future Pi features.
+disable-model-invocation: false
 ---
 
 # Pi documentation
 
-Use the documentation from the installed Pi package as the source of truth.
+Use artifacts bundled with the active Pi installation as the source of truth. Do not assume that documentation in the current project describes the installed Pi version.
 
-## Locate the package
+## Locate the active installation
 
-Resolve the package root from the active `pi` executable:
+1. If `PI_PACKAGE_DIR` names an existing directory, use it.
+2. Otherwise, resolve the active `pi` executable. Account for symlinks, package-manager wrappers, source execution, and compiled binaries. Walk upward from its real path to find the Pi package root instead of assuming a fixed path such as `<package>/dist/cli.js`.
+3. Verify the discovered root using its `package.json` and bundled Pi assets. For a compiled binary, also inspect the executable's directory for those assets.
+4. Verify each path before reading it. If the installed distribution omits its documentation, report that limitation instead of silently consulting a different Pi version.
 
-```bash
-PI_PACKAGE_ROOT="$(dirname "$(dirname "$(realpath "$(command -v pi)")")")"
-```
+Bundled references may include:
 
-The main references are:
+- `README.md`
+- `docs/`
+- `examples/`
+- `package.json`
+- public declarations under `dist/**/*.d.ts`
 
-- `$PI_PACKAGE_ROOT/README.md`
-- `$PI_PACKAGE_ROOT/docs/`
-- `$PI_PACKAGE_ROOT/examples/`
+Resolve these paths against the active installation, never against the current project.
 
-Do not resolve `docs/...` or `examples/...` against the current project.
+## Find relevant material
 
-## Find the relevant documentation
+Inspect the installed documentation structure instead of relying on a fixed topic-to-file map:
 
-Start with `README.md`, then read the topic-specific document and relevant examples:
+1. Use `docs/index.md`, `docs/docs.json`, the root `README.md`, and directory listings when available to identify relevant documents.
+2. Read the relevant Markdown documents completely before implementing.
+3. Follow cross-references that affect the task.
+4. Inspect relevant examples for the API or extension point being changed.
+5. If a referenced source file is not bundled, or exact signatures matter, inspect the installed public type declarations and implementation.
+6. Prefer documentation and public declarations over implementation details. Distinguish documented behavior, observed implementation, and recommendations.
 
-- Extensions: `docs/extensions.md` and `examples/extensions/`
-- Themes: `docs/themes.md`
-- Skills: `docs/skills.md`
-- Prompt templates: `docs/prompt-templates.md`
-- Terminal user interface components: `docs/tui.md`
-- Keybindings: `docs/keybindings.md`
-- Software development kit integrations: `docs/sdk.md` and `examples/sdk/`
-- Custom providers: `docs/custom-provider.md`
-- Models: `docs/models.md`
-- Packages: `docs/packages.md`
-
-Read relevant Markdown files completely before implementing. Follow their cross-references when those references affect the task. Inspect examples for the API or extension point being changed.
-
-Use exact API names and behavior from the installed version. Distinguish documented behavior from recommendations or inference.
+State the installed Pi package name and version when version differences could affect the answer. Use exact API names and behavior from that installed version.

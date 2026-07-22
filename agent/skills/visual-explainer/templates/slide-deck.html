@@ -6,9 +6,9 @@
     <title>API Gateway Redesign — Reference Slide Deck</title>
     <!--
   Reference template for the visual-explainer skill: slide decks.
-  Midnight Editorial preset — deep navy, serif display, warm gold accents.
-  Distinctly different from the terracotta (architecture), teal (mermaid),
-  and rose (data-table) templates so agents absorb variety.
+  Editorial preset — serif display + mono, on the unified cool-slate scheme (grey
+  #f6f7f9 page, white surfaces, navy #10192b text, muted teal/amber/blue/red/green
+  accents) shared across every template; differs by typography and layout, not color.
   Key patterns demonstrated:
   - All 10 slide types in a cohesive narrative
   - SlideEngine JS: keyboard/touch/wheel nav, progress bar, dots, counter, hints
@@ -39,24 +39,24 @@
       :root {
         --font-body: "Instrument Serif", Georgia, serif;
         --font-mono: "JetBrains Mono", "SF Mono", Consolas, monospace;
-        --bg: #faf8f2;
+        --bg: #f6f7f9;
         --surface: #ffffff;
-        --surface2: #f5f0e6;
-        --surface-elevated: #fffdf5;
-        --border: rgba(30, 30, 50, 0.08);
-        --border-bright: rgba(30, 30, 50, 0.16);
-        --text: #1a1814;
-        --text-dim: #7a7468;
-        --accent: #b8860b;
-        --accent-dim: rgba(184, 134, 11, 0.08);
-        --code-bg: #2a2520;
-        --code-text: #e8e4d8;
-        --green: #16a34a;
-        --green-dim: rgba(22, 163, 74, 0.08);
-        --red: #dc2626;
-        --red-dim: rgba(220, 38, 38, 0.08);
-        --blue: #2563eb;
-        --blue-dim: rgba(37, 99, 235, 0.08);
+        --surface2: #eef0f3;
+        --surface-elevated: #ffffff;
+        --border: rgba(15, 23, 42, 0.09);
+        --border-bright: rgba(15, 23, 42, 0.18);
+        --text: #10192b;
+        --text-dim: #5b6472;
+        --accent: #0f766e;
+        --accent-dim: rgba(15, 118, 110, 0.1);
+        --code-bg: #14232f;
+        --code-text: #dfe8ef;
+        --green: #15803d;
+        --green-dim: rgba(21, 128, 61, 0.09);
+        --red: #b91c1c;
+        --red-dim: rgba(185, 28, 28, 0.08);
+        --blue: #1d4ed8;
+        --blue-dim: rgba(29, 78, 216, 0.09);
       }
 
       * {
@@ -278,11 +278,6 @@
         justify-content: center;
         align-items: center;
         text-align: center;
-        background-image: radial-gradient(
-          ellipse at 50% 30%,
-          var(--accent-dim) 0%,
-          transparent 50%
-        );
       }
 
       .slide--title .slide__display {
@@ -693,12 +688,7 @@
       }
 
       .slide__bg--gradient {
-        background: linear-gradient(
-          135deg,
-          #1a0f3c 0%,
-          #0f1729 40%,
-          #162040 100%
-        );
+        background: #0f1729;
       }
 
       .slide__scrim {
@@ -852,16 +842,7 @@
       </section>
 
       <!-- SLIDE 2: SECTION DIVIDER -->
-      <section
-        class="slide slide--divider"
-        style="
-          background-image: radial-gradient(
-            ellipse at 80% 60%,
-            var(--accent-dim) 0%,
-            transparent 40%
-          );
-        "
-      >
+      <section class="slide slide--divider">
         <span class="slide__number">01</span>
         <div>
           <h2 class="slide__heading reveal">The Problem</h2>
@@ -872,16 +853,7 @@
       </section>
 
       <!-- SLIDE 3: CONTENT (left-heavy asymmetric) -->
-      <section
-        class="slide slide--content"
-        style="
-          background-image: radial-gradient(
-            ellipse at 20% 80%,
-            var(--accent-dim) 0%,
-            transparent 45%
-          );
-        "
-      >
+      <section class="slide slide--content">
         <div class="slide__inner">
           <div>
             <p class="slide__label reveal">Current State</p>
@@ -973,16 +945,7 @@
       </section>
 
       <!-- SLIDE 5: SECTION DIVIDER -->
-      <section
-        class="slide slide--divider"
-        style="
-          background-image: radial-gradient(
-            ellipse at 30% 40%,
-            var(--accent-dim) 0%,
-            transparent 40%
-          );
-        "
-      >
+      <section class="slide slide--divider">
         <span class="slide__number">02</span>
         <div>
           <h2 class="slide__heading reveal">Architecture</h2>
@@ -1033,9 +996,9 @@
               Router --> Static["Static Assets"]
               API --> DB["Database"]
 
-              classDef primary fill:#d4a73a22,stroke:#d4a73a,stroke-width:2px
-              classDef secondary fill:#60a5fa22,stroke:#60a5fa,stroke-width:2px
-              classDef storage fill:#4ade8022,stroke:#4ade80,stroke-width:2px
+              classDef primary fill:#0f766e22,stroke:#0f766e,stroke-width:2px
+              classDef secondary fill:#1d4ed822,stroke:#1d4ed8,stroke-width:2px
+              classDef storage fill:#15803d22,stroke:#15803d,stroke-width:2px
 
               class Client,Edge primary
               class Auth,RL,Router secondary
@@ -1045,16 +1008,7 @@
       </section>
 
       <!-- SLIDE 7: DASHBOARD -->
-      <section
-        class="slide slide--dashboard"
-        style="
-          background-image: radial-gradient(
-            ellipse at 70% 30%,
-            var(--accent-dim) 0%,
-            transparent 40%
-          );
-        "
-      >
+      <section class="slide slide--dashboard">
         <h2 class="slide__heading reveal">Performance Impact</h2>
         <div class="slide__kpis">
           <div class="slide__kpi reveal">
@@ -1143,16 +1097,7 @@
       </section>
 
       <!-- SLIDE 9: CODE -->
-      <section
-        class="slide slide--code"
-        style="
-          background-image: radial-gradient(
-            ellipse at 50% 80%,
-            var(--accent-dim) 0%,
-            transparent 40%
-          );
-        "
-      >
+      <section class="slide slide--code">
         <h2 class="slide__heading reveal" style="text-align: center">
           Edge Worker Entry Point
         </h2>
@@ -1176,16 +1121,7 @@
       </section>
 
       <!-- SLIDE 10: QUOTE -->
-      <section
-        class="slide slide--quote"
-        style="
-          background-image: radial-gradient(
-            ellipse at 50% 50%,
-            var(--accent-dim) 0%,
-            transparent 35%
-          );
-        "
-      >
+      <section class="slide slide--quote">
         <div class="slide__quote-mark reveal">&ldquo;</div>
         <blockquote class="reveal">
           The fastest request is the one that never leaves the edge.
@@ -1229,21 +1165,21 @@
         theme: "base",
         look: "classic",
         themeVariables: {
-          primaryColor: isDark ? "#1d2b52" : "#fef3e0",
-          primaryBorderColor: isDark ? "#d4a73a" : "#b8860b",
-          primaryTextColor: isDark ? "#e8e4d8" : "#1a1814",
-          secondaryColor: isDark ? "#162040" : "#eff6ff",
-          secondaryBorderColor: isDark ? "#60a5fa" : "#2563eb",
-          secondaryTextColor: isDark ? "#e8e4d8" : "#1a1814",
-          tertiaryColor: isDark ? "#0f2620" : "#f0fdf4",
-          tertiaryBorderColor: isDark ? "#4ade80" : "#16a34a",
-          tertiaryTextColor: isDark ? "#e8e4d8" : "#1a1814",
-          lineColor: isDark ? "#9a9484" : "#7a7468",
+          primaryColor: isDark ? "#115e59" : "#d5efec",
+          primaryBorderColor: isDark ? "#2dd4bf" : "#0f766e",
+          primaryTextColor: isDark ? "#e8e4d8" : "#10192b",
+          secondaryColor: isDark ? "#162040" : "#e7edfb",
+          secondaryBorderColor: isDark ? "#60a5fa" : "#1d4ed8",
+          secondaryTextColor: isDark ? "#e8e4d8" : "#10192b",
+          tertiaryColor: isDark ? "#2e2618" : "#f7ecd9",
+          tertiaryBorderColor: isDark ? "#fbbf24" : "#b45309",
+          tertiaryTextColor: isDark ? "#e8e4d8" : "#10192b",
+          lineColor: isDark ? "#9a9484" : "#5b6472",
           fontSize: "18px",
           fontFamily: "var(--font-body)",
-          noteBkgColor: isDark ? "#1d2b52" : "#fef3e0",
-          noteTextColor: isDark ? "#e8e4d8" : "#1a1814",
-          noteBorderColor: isDark ? "#d4a73a" : "#b8860b",
+          noteBkgColor: isDark ? "#1d2b52" : "#f7ecd9",
+          noteTextColor: isDark ? "#e8e4d8" : "#10192b",
+          noteBorderColor: isDark ? "#fbbf24" : "#b45309",
         },
       });
 

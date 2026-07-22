@@ -4,29 +4,32 @@ Reusable patterns for layout, connectors, theming, and visual effects in self-co
 
 ## Theme Setup
 
-Default to a light-mode palette via custom properties: light `--bg`/`--surface`, dark `--text`. Do **not** add a `@media (prefers-color-scheme: dark)` override or OS-adaptive auto-switching by default — add a dark or adaptive theme only when the user explicitly asks, and keep light as the `:root` default.
+Default to a light-mode palette via custom properties: a **plain cool-slate `--bg` (`#f6f7f9`)** with a **white `--surface`**, near-black navy `--text` (`#10192b`), slate `--text-dim` (`#5b6472`), and low-alpha cool borders. Accents are muted jewel tones led by teal (`#0f766e`), plus amber / blue / red / green. The grey page against white surfaces gives cards and panels definition without any gradient. Do **not** add a `@media (prefers-color-scheme: dark)` override or OS-adaptive auto-switching by default — add a dark or adaptive theme only when the user explicitly asks, and keep light as the `:root` default.
 
 ```css
 :root {
-  --font-body: "Outfit", system-ui, sans-serif;
-  --font-mono: "Space Mono", "SF Mono", Consolas, monospace;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", Consolas, monospace;
 
-  --bg: #f8f9fa;
+  --bg: #f6f7f9;
   --surface: #ffffff;
   --surface-elevated: #ffffff;
-  --border: rgba(0, 0, 0, 0.08);
-  --border-bright: rgba(0, 0, 0, 0.15);
-  --text: #1a1a2e;
-  --text-dim: #6b7280;
-  --accent: #0891b2;
-  --accent-dim: rgba(8, 145, 178, 0.1);
-  /* Semantic accents for diagram elements */
-  --node-a: #0891b2;
-  --node-a-dim: rgba(8, 145, 178, 0.1);
-  --node-b: #059669;
-  --node-b-dim: rgba(5, 150, 105, 0.1);
-  --node-c: #d97706;
-  --node-c-dim: rgba(217, 119, 6, 0.1);
+  --surface2: #eef0f3; /* cool recessed panel */
+  --border: rgba(15, 23, 42, 0.09);
+  --border-bright: rgba(15, 23, 42, 0.18);
+  --text: #10192b;
+  --text-dim: #5b6472;
+  --accent: #0f766e; /* teal — primary */
+  --accent-dim: rgba(15, 118, 110, 0.1);
+  /* Muted jewel-tone semantic accents */
+  --blue: #1d4ed8;
+  --blue-dim: rgba(29, 78, 216, 0.09);
+  --amber: #b45309;
+  --amber-dim: rgba(180, 83, 9, 0.1);
+  --green: #15803d;
+  --green-dim: rgba(21, 128, 61, 0.09);
+  --red: #b91c1c;
+  --red-dim: rgba(185, 28, 28, 0.08);
 }
 ```
 
@@ -55,46 +58,35 @@ Default to a light-mode palette via custom properties: light `--bg`/`--surface`,
 }
 ```
 
-## Background Atmosphere
+## Background
 
-Flat backgrounds feel dead. Use subtle gradients or patterns.
+Use a **plain, flat background** — a solid cool-slate page (`#f6f7f9`) with white
+surfaces on top. Simplicity and readability come first. Do **not** add gradient glows,
+dot grids, diagonal lines, or gradient meshes to the page background; they add noise
+without meaning.
 
 ```css
-/* Radial glow behind focal area */
 body {
-  background: var(--bg);
-  background-image: radial-gradient(
-    ellipse at 50% 0%,
-    var(--accent-dim) 0%,
-    transparent 60%
-  );
+  background: var(--bg); /* plain #f6f7f9; no background-image */
+  color: var(--text);
 }
+```
 
-/* Faint dot grid */
-body {
-  background-color: var(--bg);
-  background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
-  background-size: 24px 24px;
-}
+Create structure and depth with the **grey page / white surface contrast**, plus
+**borders, spacing, and subtle shadows** on surfaces (cards, panels, code blocks) — not
+with background decoration. A gradient is acceptable
+only when it is _functional_ (e.g. a scrim over a photo for text legibility), never as
+ambient atmosphere.
 
-/* Diagonal subtle lines */
-body {
-  background-color: var(--bg);
-  background-image: repeating-linear-gradient(
-    -45deg,
-    transparent,
-    transparent 40px,
-    var(--border) 40px,
-    var(--border) 41px
-  );
-}
-
-/* Gradient mesh (pick 2-3 positioned radials) */
-body {
-  background: var(--bg);
-  background-image:
-    radial-gradient(at 20% 20%, var(--node-a-dim) 0%, transparent 50%),
-    radial-gradient(at 80% 60%, var(--node-b-dim) 0%, transparent 50%);
+```css
+/* Depth via surface + border + shadow, not background texture */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 8px 24px rgba(0, 0, 0, 0.06);
 }
 ```
 
@@ -1881,12 +1873,12 @@ Use a `data-theme` attribute only when the user explicitly wants a user-controll
 ```css
 :root,
 [data-theme="light"] {
-  --bg: #fafaf9;
+  --bg: #f6f7f9;
   --surface: #ffffff;
-  --text: #1c1917;
-  --text-dim: #78716c;
-  --border: #e7e5e4;
-  --accent: #0d9488;
+  --text: #10192b;
+  --text-dim: #5b6472;
+  --border: rgba(15, 23, 42, 0.09);
+  --accent: #0f766e;
 }
 
 [data-theme="dark"] {

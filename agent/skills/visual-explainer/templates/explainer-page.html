@@ -1,0 +1,1130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Explainer Page — Reference Template</title>
+    <!--
+  Reference template for the visual-explainer skill: EXPLAINER-PAGE MODE.
+  Use when the goal is understanding — teaching a diff, PR, or unfamiliar system
+  in depth. One long scrollable page, narrative structure, no top-level tabs.
+
+  Unified cool-slate scheme (grey #f6f7f9 page, white surfaces, navy #10192b text,
+  muted teal/amber/blue/red/green accents) shared across every template; templates
+  differ by typography and layout, not color. See references/css-patterns.md.
+
+  Structure demonstrated (keep this order):
+    Sticky scrollspy TOC  →  Overview (hero)
+    1 Background  (collapsible beginner primer + narrow context + before/after)
+    2 Intuition   (mental model + INTERACTIVE trace diagram with example data)
+    3 Walkthrough (numbered steps grouped for comprehension, real example data,
+                   annotated code blocks, before/after panels inside the narrative)
+    4 (optional domain section, e.g. security / tradeoffs)
+    5 Quiz        (4–6 interactive multiple-choice, medium difficulty, no gotchas)
+
+  Key patterns:
+  - Blueprint accent palette via CSS custom properties; plain white background
+  - Sticky sidebar TOC with IntersectionObserver scrollspy (single-column fallback)
+  - Collapsible <details> primer for skippable beginner background
+  - Three accent callout variants (blue/gold/rose/sage) with mono tag labels
+  - Annotated dark code/JSON blocks: .k key .s string .ref reference .c comment .hl highlight
+  - INTERACTIVE trace diagram: 3 lookup panels, buttons light up the path (example data)
+  - Vertical numbered pipeline with connector line
+  - Two-column before/after panels (diff-colored headers) INSIDE the narrative
+  - Fully interactive quiz rendered from a JS array (click reveals correct/incorrect + explanation)
+  - prefers-reduced-motion respected
+
+  Replace all placeholder copy and the JS data objects (routing/endRef/QUIZ) with
+  real subject matter. Diagrams must show believable EXAMPLE DATA, not empty boxes.
+-->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f6f7f9;
+        --surface: #ffffff;
+        --surface-2: #eef0f3;
+        --border: rgba(15, 23, 42, 0.09);
+        --ink: #10192b;
+        --ink-dim: #5b6472;
+        --ink-faint: #8a93a0;
+        --blue: #1d4ed8;
+        --blue-soft: #e7edfb;
+        --gold: #b45309;
+        --gold-soft: #f7ecd9;
+        --teal: #0f766e;
+        --teal-soft: #ddefec;
+        --rose: #b91c1c;
+        --rose-soft: #f7e4e4;
+        --sage: #15803d;
+        --sage-soft: #e7efe7;
+        --shadow:
+          0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.07);
+        --radius: 14px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "IBM Plex Sans", sans-serif;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+      code,
+      pre,
+      .mono {
+        font-family: "IBM Plex Mono", monospace;
+      }
+      .wrap {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+      a {
+        color: var(--blue);
+      }
+
+      /* layout with sticky TOC */
+      .shell {
+        display: grid;
+        grid-template-columns: 220px minmax(0, 1fr);
+        gap: 40px;
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+      nav.toc {
+        position: sticky;
+        top: 0;
+        align-self: start;
+        height: 100dvh;
+        padding: 32px 0;
+        overflow-y: auto;
+      }
+      nav.toc .brand {
+        font-weight: 700;
+        font-size: 0.82rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--gold);
+        margin-bottom: 4px;
+      }
+      nav.toc .tkr {
+        font-size: 0.78rem;
+        color: var(--ink-faint);
+        margin-bottom: 22px;
+        font-family: "IBM Plex Mono";
+      }
+      nav.toc ol {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        border-left: 1px solid var(--border);
+      }
+      nav.toc li a {
+        display: block;
+        padding: 7px 14px;
+        color: var(--ink-dim);
+        text-decoration: none;
+        font-size: 0.9rem;
+        border-left: 2px solid transparent;
+        margin-left: -1px;
+      }
+      nav.toc li a:hover {
+        color: var(--ink);
+      }
+      nav.toc li a.active {
+        color: var(--blue);
+        border-left-color: var(--blue);
+        font-weight: 600;
+      }
+      main {
+        min-width: 0;
+        padding: 0 0 120px;
+      }
+      @media (max-width: 900px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+        nav.toc {
+          position: static;
+          height: auto;
+          padding: 20px 0 0;
+        }
+        nav.toc ol {
+          display: flex;
+          flex-wrap: wrap;
+          border-left: none;
+        }
+        nav.toc li a {
+          border-left: none;
+          padding: 6px 10px;
+        }
+      }
+
+      section {
+        padding-top: 56px;
+        margin-top: 8px;
+      }
+      h1 {
+        font-size: 2.5rem;
+        line-height: 1.1;
+        margin: 0 0 12px;
+        letter-spacing: -0.02em;
+      }
+      h2 {
+        font-size: 1.5rem;
+        margin: 0 0 6px;
+        letter-spacing: -0.01em;
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+      }
+      h2 .num {
+        font-family: "IBM Plex Mono";
+        font-size: 0.9rem;
+        color: var(--gold);
+        font-weight: 600;
+      }
+      h3 {
+        font-size: 1.06rem;
+        margin: 26px 0 8px;
+      }
+      p {
+        margin: 12px 0;
+        max-width: 70ch;
+      }
+      .lede {
+        font-size: 1.15rem;
+        color: var(--ink-dim);
+        max-width: 66ch;
+      }
+      .sec-intro {
+        color: var(--ink-dim);
+        max-width: 70ch;
+        margin-bottom: 8px;
+      }
+      .prose-serif {
+        font-family: "IBM Plex Serif", serif;
+      }
+
+      .hero {
+        padding: 64px 0 8px;
+      }
+      .kicker {
+        font-family: "IBM Plex Mono";
+        font-size: 0.8rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--gold);
+        margin-bottom: 14px;
+      }
+      .hero-meta {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 22px;
+      }
+      .chip {
+        font-family: "IBM Plex Mono";
+        font-size: 0.74rem;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--ink-dim);
+      }
+      .chip b {
+        color: var(--blue);
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 22px 24px;
+        box-shadow: var(--shadow);
+        margin: 20px 0;
+      }
+      .flat {
+        box-shadow: none;
+        background: var(--surface-2);
+      }
+      details.primer {
+        border: 1px dashed var(--border);
+        border-radius: 12px;
+        padding: 6px 18px;
+        background: var(--surface);
+        margin: 18px 0;
+      }
+      details.primer summary {
+        cursor: pointer;
+        font-weight: 600;
+        color: var(--blue);
+        padding: 10px 0;
+        list-style: none;
+      }
+      details.primer summary::-webkit-details-marker {
+        display: none;
+      }
+      details.primer summary::before {
+        content: "▸ ";
+        color: var(--gold);
+      }
+      details.primer[open] summary::before {
+        content: "▾ ";
+      }
+
+      /* callouts */
+      .callout {
+        border-left: 3px solid var(--blue);
+        background: var(--blue-soft);
+        padding: 12px 16px;
+        border-radius: 0 10px 10px 0;
+        margin: 16px 0;
+        font-size: 0.95rem;
+      }
+      .callout.gold {
+        border-color: var(--gold);
+        background: var(--gold-soft);
+      }
+      .callout.rose {
+        border-color: var(--rose);
+        background: var(--rose-soft);
+      }
+      .callout.sage {
+        border-color: var(--sage);
+        background: var(--sage-soft);
+      }
+      .callout .tag {
+        font-family: "IBM Plex Mono";
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 600;
+        display: block;
+        margin-bottom: 3px;
+      }
+      .callout.gold .tag {
+        color: var(--gold);
+      }
+      .callout.rose .tag {
+        color: var(--rose);
+      }
+      .callout.sage .tag {
+        color: var(--sage);
+      }
+      .callout .tag {
+        color: var(--blue);
+      }
+
+      /* code / json */
+      pre {
+        background: #14232f;
+        color: #dfe8ef;
+        border-radius: 12px;
+        padding: 16px 18px;
+        overflow-x: auto;
+        font-size: 0.86rem;
+        line-height: 1.55;
+        margin: 14px 0;
+        border: 1px solid #0e1a23;
+      }
+      pre .k {
+        color: #8fd0c7;
+      } /* key */
+      pre .s {
+        color: #e6c58a;
+      } /* string value */
+      pre .ref {
+        color: #f2a65a;
+        font-weight: 600;
+      } /* reference / emphasis token */
+      pre .c {
+        color: #6f8494;
+        font-style: italic;
+      } /* comment */
+      pre .p {
+        color: #9fb2c0;
+      } /* punctuation */
+      pre .hl {
+        background: rgba(242, 166, 90, 0.16);
+        border-radius: 3px;
+        padding: 0 2px;
+      }
+      code.inline {
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 1px 6px;
+        font-size: 0.85em;
+        color: var(--blue);
+      }
+
+      /* the mental-model / trace diagram — three lookup panels */
+      .rig {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 14px;
+        align-items: stretch;
+        margin: 8px 0 4px;
+      }
+      @media (max-width: 760px) {
+        .rig {
+          grid-template-columns: 1fr;
+        }
+      }
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px;
+        min-width: 0;
+      }
+      .panel h4 {
+        margin: 0 0 4px;
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        font-family: "IBM Plex Mono";
+      }
+      .panel .sub {
+        font-size: 0.78rem;
+        color: var(--ink-faint);
+        margin-bottom: 10px;
+      }
+      .panel.route h4 {
+        color: var(--teal);
+      }
+      .panel.route {
+        border-top: 3px solid var(--teal);
+      }
+      .panel.ends h4 {
+        color: var(--blue);
+      }
+      .panel.ends {
+        border-top: 3px solid var(--blue);
+      }
+      .panel.vault h4 {
+        color: var(--gold);
+      }
+      .panel.vault {
+        border-top: 3px solid var(--gold);
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: "IBM Plex Mono";
+        font-size: 0.8rem;
+        padding: 6px 8px;
+        border-radius: 8px;
+        background: var(--surface-2);
+        margin: 6px 0;
+      }
+      .row .arw {
+        color: var(--ink-faint);
+      }
+      .row.on {
+        outline: 2px solid var(--teal);
+        background: var(--teal-soft);
+      }
+      .row.on-b {
+        outline: 2px solid var(--blue);
+        background: var(--blue-soft);
+      }
+      .row.on-g {
+        outline: 2px solid var(--gold);
+        background: var(--gold-soft);
+      }
+      .tags {
+        margin-left: auto;
+        font-size: 0.68rem;
+        color: var(--ink-faint);
+      }
+      .trace-ctl {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 14px 0 2px;
+      }
+      .btn {
+        font-family: "IBM Plex Mono";
+        font-size: 0.8rem;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--ink);
+        padding: 7px 14px;
+        border-radius: 9px;
+        cursor: pointer;
+        transition: 0.15s;
+      }
+      .btn:hover {
+        border-color: var(--blue);
+        color: var(--blue);
+      }
+      .btn.act {
+        background: var(--ink);
+        color: #fff;
+        border-color: var(--ink);
+      }
+      .trace-note {
+        font-size: 0.9rem;
+        color: var(--ink-dim);
+        min-height: 1.5em;
+        margin-top: 8px;
+        font-family: "IBM Plex Mono";
+      }
+      .trace-note b {
+        color: var(--blue);
+      }
+
+      /* vertical numbered pipeline */
+      .pipe {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        margin: 10px 0;
+      }
+      .step {
+        display: grid;
+        grid-template-columns: 40px 1fr;
+        gap: 16px;
+        position: relative;
+        padding-bottom: 22px;
+      }
+      .step:not(:last-child)::before {
+        content: "";
+        position: absolute;
+        left: 19px;
+        top: 34px;
+        bottom: -4px;
+        width: 2px;
+        background: var(--border);
+      }
+      .step .dot {
+        width: 40px;
+        height: 40px;
+        border-radius: 11px;
+        display: grid;
+        place-items: center;
+        font-family: "IBM Plex Mono";
+        font-weight: 600;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--blue);
+        z-index: 1;
+      }
+      .step .body h4 {
+        margin: 6px 0 4px;
+        font-size: 1rem;
+      }
+      .step .body p {
+        margin: 2px 0;
+        font-size: 0.94rem;
+        color: var(--ink-dim);
+      }
+
+      /* before/after panels */
+      .ba {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin: 16px 0;
+      }
+      @media (max-width: 720px) {
+        .ba {
+          grid-template-columns: 1fr;
+        }
+      }
+      .ba .col {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      .ba .col header {
+        padding: 8px 14px;
+        font-family: "IBM Plex Mono";
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+      }
+      .ba .before header {
+        background: var(--rose-soft);
+        color: var(--rose);
+        border-bottom: 1px solid var(--border);
+      }
+      .ba .after header {
+        background: var(--sage-soft);
+        color: var(--sage);
+        border-bottom: 1px solid var(--border);
+      }
+      .ba .col .in {
+        padding: 14px;
+      }
+      .ba .col p {
+        margin: 0 0 8px;
+        font-size: 0.9rem;
+      }
+      .ba .col ul {
+        margin: 0;
+        padding-left: 18px;
+        font-size: 0.88rem;
+        color: var(--ink-dim);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 14px 0;
+        font-size: 0.9rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      th {
+        background: var(--surface-2);
+        font-size: 0.76rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--ink-dim);
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td code {
+        font-family: "IBM Plex Mono";
+        font-size: 0.85em;
+      }
+
+      /* quiz */
+      .q {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+        padding: 18px 20px;
+        margin: 16px 0;
+      }
+      .q .qh {
+        font-weight: 600;
+        margin-bottom: 12px;
+      }
+      .q .qh .n {
+        font-family: "IBM Plex Mono";
+        color: var(--gold);
+        margin-right: 8px;
+      }
+      .opt {
+        display: block;
+        width: 100%;
+        text-align: left;
+        border: 1px solid var(--border);
+        background: var(--surface-2);
+        border-radius: 9px;
+        padding: 10px 14px;
+        margin: 7px 0;
+        cursor: pointer;
+        font-size: 0.92rem;
+        transition: 0.12s;
+        color: var(--ink);
+      }
+      .opt:hover {
+        border-color: var(--blue);
+      }
+      .opt.correct {
+        background: var(--sage-soft);
+        border-color: var(--sage);
+        color: #26492b;
+      }
+      .opt.wrong {
+        background: var(--rose-soft);
+        border-color: var(--rose);
+        color: #7a2233;
+      }
+      .opt .mk {
+        font-family: "IBM Plex Mono";
+        font-weight: 600;
+        margin-right: 8px;
+      }
+      .expl {
+        font-size: 0.88rem;
+        color: var(--ink-dim);
+        margin-top: 10px;
+        padding-left: 14px;
+        border-left: 2px solid var(--gold);
+        display: none;
+      }
+      .expl.show {
+        display: block;
+      }
+
+      footer {
+        border-top: 1px solid var(--border);
+        margin-top: 60px;
+        padding: 24px 0;
+        color: var(--ink-faint);
+        font-size: 0.82rem;
+        font-family: "IBM Plex Mono";
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="toc">
+        <div class="brand">Project · Area</div>
+        <!-- REPLACE -->
+        <div class="tkr">TICKET-000</div>
+        <!-- REPLACE -->
+        <ol id="tocList">
+          <li><a href="#top">Overview</a></li>
+          <li><a href="#background">1 · Background</a></li>
+          <li><a href="#intuition">2 · Intuition</a></li>
+          <li><a href="#walkthrough">3 · Walkthrough</a></li>
+          <li><a href="#deepdive">4 · Deep dive</a></li>
+          <li><a href="#quiz">5 · Check yourself</a></li>
+        </ol>
+      </nav>
+
+      <main>
+        <!-- ===================== OVERVIEW / HERO ===================== -->
+        <section id="top" class="hero" style="padding-top: 44px">
+          <div class="kicker">Category · Subsystem</div>
+          <!-- REPLACE -->
+          <h1>One-line title of the thing you're explaining</h1>
+          <p class="lede">
+            A single sentence of orientation: what changed or what this system
+            does, phrased for someone who has never seen it. Keep it concrete;
+            name the real nouns.
+          </p>
+          <div class="hero-meta">
+            <span class="chip"><b>N</b> moving parts</span>
+            <span class="chip"><b>2</b> lookups</span>
+            <span class="chip">scope: <b>backend</b></span>
+          </div>
+        </section>
+
+        <!-- ===================== 1 · BACKGROUND ===================== -->
+        <section id="background">
+          <h2><span class="num">01</span> Background</h2>
+          <p class="sec-intro">
+            One line telling beginners to start here and experts to skip ahead.
+          </p>
+
+          <!-- PATTERN: skippable beginner primer -->
+          <details class="primer">
+            <summary>New to the vocabulary? A 60-second primer</summary>
+            <p>
+              Define the 2–3 domain terms a newcomer needs, in plain language,
+              with a concrete inline example like
+              <code class="inline">example_value</code>. This is broad context —
+              keep it genuinely skippable for those who already know it.
+            </p>
+            <p>A second short paragraph if a second concept needs grounding.</p>
+          </details>
+
+          <p>
+            Now the narrow context directly relevant to the change: what existed
+            before, why it was limiting. Explore the surrounding code first so
+            this is accurate.
+          </p>
+
+          <!-- PATTERN: before/after framing of the shift -->
+          <div class="ba">
+            <div class="col before">
+              <header>BEFORE</header>
+              <div class="in">
+                <p>How it worked previously, in one line.</p>
+                <ul>
+                  <li>Limitation one</li>
+                  <li>Limitation two</li>
+                  <li>Limitation three</li>
+                </ul>
+              </div>
+            </div>
+            <div class="col after">
+              <header>AFTER</header>
+              <div class="in">
+                <p>How it works now, in one line.</p>
+                <ul>
+                  <li>Improvement one</li>
+                  <li>Improvement two</li>
+                  <li>Improvement three</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Thing</th>
+                <th>Shape</th>
+                <th>Answers</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>THING_A</code></td>
+                <td>e.g. JSON map</td>
+                <td>What it decides</td>
+              </tr>
+              <tr>
+                <td><code>THING_B</code></td>
+                <td>e.g. CSV list</td>
+                <td>What it decides</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- ===================== 2 · INTUITION ===================== -->
+        <section id="intuition">
+          <h2><span class="num">02</span> The intuition</h2>
+          <p class="sec-intro">
+            The essence, not the details. One vivid mental model, then a worked
+            example.
+          </p>
+
+          <p>
+            State the mental model in one or two sentences (e.g. “two lookup
+            tables plus a locked drawer”). The diagram below carries the weight
+            — if you need a paragraph to explain it, redraw it.
+          </p>
+
+          <!-- PATTERN: interactive trace diagram. Wire the JS data objects at the bottom.
+           Panels use example data; buttons light up the path an input takes. -->
+          <div class="card">
+            <div class="rig">
+              <div class="panel route">
+                <h4>Lookup A</h4>
+                <div class="sub"><code>INPUT → KEY</code></div>
+                <div class="row" data-lang="ALPHA">
+                  ALPHA <span class="arw">→</span> <b>node-1</b>
+                </div>
+                <div class="row" data-lang="BETA">
+                  BETA <span class="arw">→</span> <b>node-2</b>
+                </div>
+                <div class="row" data-lang="DEFAULT">
+                  default <span class="arw">→</span> <b>node-1</b>
+                </div>
+              </div>
+              <div class="panel ends">
+                <h4>Lookup B</h4>
+                <div class="sub"><code>KEY → TARGET</code></div>
+                <div class="row" data-end="node-1">
+                  node-1<span class="tags">kind · detail</span>
+                </div>
+                <div class="row" data-end="node-2">
+                  node-2<span class="tags">kind · detail</span>
+                </div>
+              </div>
+              <div class="panel vault">
+                <h4>Resolution</h4>
+                <div class="sub">reference → value</div>
+                <div class="row" data-ref="REF_ONE">
+                  REF_ONE<span class="tags">••••••</span>
+                </div>
+                <div class="row" data-ref="REF_TWO">
+                  REF_TWO<span class="tags">••••••</span>
+                </div>
+              </div>
+            </div>
+            <div class="trace-ctl">
+              <span
+                style="
+                  align-self: center;
+                  font-size: 0.85rem;
+                  color: var(--ink-dim);
+                "
+                >Trace an input:</span
+              >
+              <button class="btn" data-trace="ALPHA">Alpha</button>
+              <button class="btn" data-trace="BETA">Beta</button>
+              <button class="btn" data-trace="GAMMA">Gamma (unmapped)</button>
+              <button class="btn" data-trace="reset">Reset</button>
+            </div>
+            <div class="trace-note" id="traceNote">
+              Pick an input above to light up the path it takes.
+            </div>
+          </div>
+
+          <div class="callout gold">
+            <span class="tag">Note</span>
+            Use a callout to flag an edge case, a simplification in the diagram,
+            or a definition. Variants: default (blue),
+            <code class="inline">gold</code>, <code class="inline">rose</code>,
+            <code class="inline">sage</code>.
+          </div>
+        </section>
+
+        <!-- ===================== 3 · WALKTHROUGH ===================== -->
+        <section id="walkthrough">
+          <h2><span class="num">03</span> Walkthrough</h2>
+          <p class="sec-intro">
+            Follow one concrete case end to end. Group and order steps for
+            comprehension, not by file.
+          </p>
+
+          <h3>Step 1 · Name the step</h3>
+          <p>
+            Explain what happens, then show it with an annotated code/JSON block
+            that uses <em>real-looking example data</em>.
+          </p>
+          <pre><span class="p">{</span>
+  <span class="k">"key"</span>: <span class="p">{</span>
+    <span class="k">"field"</span>: <span class="s">"concrete-value"</span>,
+    <span class="k">"reference"</span>: <span class="ref">"ENV_VAR_NAME"</span>   <span class="c">// a name, not the value</span>
+  <span class="p">}</span>
+<span class="p">}</span></pre>
+
+          <h3>Step 2 · Name the step</h3>
+          <p>Keep prose flowing between steps. Use a callout for the "why".</p>
+          <div class="callout">
+            <span class="tag">Why this way?</span>The rationale in one or two
+            sentences.
+          </div>
+
+          <h3>Step 3 · A process with sub-stages</h3>
+          <!-- PATTERN: vertical numbered pipeline -->
+          <div class="pipe">
+            <div class="step">
+              <div class="dot">A</div>
+              <div class="body">
+                <h4>Stage A</h4>
+                <p>What happens and its guarantee.</p>
+              </div>
+            </div>
+            <div class="step">
+              <div class="dot">B</div>
+              <div class="body">
+                <h4>Stage B</h4>
+                <p>What happens next.</p>
+              </div>
+            </div>
+            <div class="step">
+              <div class="dot">C</div>
+              <div class="body">
+                <h4>Stage C</h4>
+                <p>The final effect.</p>
+              </div>
+            </div>
+          </div>
+
+          <h3>Step 4 · The core, kept small</h3>
+          <p>
+            When the heart of the change is a few lines, show them — annotated.
+          </p>
+          <pre><span class="k">def</span> resolve(x):
+    key = normalize(x)
+    target = table.get(key, table[<span class="s">"DEFAULT"</span>])   <span class="c"># fallback, never fails open</span>
+    <span class="k">return</span> resolved[target]</pre>
+        </section>
+
+        <!-- ===================== 4 · DEEP DIVE (optional) ===================== -->
+        <section id="deepdive">
+          <h2><span class="num">04</span> Deep dive (optional section)</h2>
+          <p class="sec-intro">
+            Reuse for security model, tradeoffs, or performance — whatever the
+            subject earns.
+          </p>
+          <div class="rig" style="grid-template-columns: 1fr 1fr">
+            <div class="card flat" style="margin: 0">
+              <h3 style="margin-top: 0">Property one</h3>
+              <p style="font-size: 0.92rem; color: var(--ink-dim)">
+                A tight paragraph on one guarantee or tradeoff.
+              </p>
+            </div>
+            <div class="card flat" style="margin: 0">
+              <h3 style="margin-top: 0">Property two</h3>
+              <p style="font-size: 0.92rem; color: var(--ink-dim)">
+                Another guarantee or tradeoff.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== 5 · QUIZ ===================== -->
+        <section id="quiz">
+          <h2><span class="num">05</span> Check yourself</h2>
+          <p class="sec-intro">
+            4–6 questions, medium difficulty, answerable only if the reader
+            understood the substance. No gotchas.
+          </p>
+          <div id="quiz"></div>
+        </section>
+
+        <footer>
+          Explainer generated with the visual-explainer skill · replace this
+          line.
+        </footer>
+      </main>
+    </div>
+
+    <script>
+      /* ---------- interactive trace diagram ---------- */
+      /* Replace these three maps with real subject data. */
+      const routing = { ALPHA: "node-1", BETA: "node-2", DEFAULT: "node-1" };
+      const endRef = { "node-1": "REF_ONE", "node-2": "REF_TWO" };
+      const endLabel = { "node-1": "kind · detail", "node-2": "kind · detail" };
+      const note = document.getElementById("traceNote");
+      function clearTrace() {
+        document
+          .querySelectorAll(".rig .row")
+          .forEach((r) => r.classList.remove("on", "on-b", "on-g"));
+      }
+      function trace(input) {
+        clearTrace();
+        if (input === "reset") {
+          note.textContent =
+            "Pick an input above to light up the path it takes.";
+          return;
+        }
+        const known = routing.hasOwnProperty(input);
+        const id = known ? routing[input] : routing.DEFAULT;
+        const ref = endRef[id];
+        const a = document.querySelector(
+          `.rig .row[data-lang="${known ? input : "DEFAULT"}"]`,
+        );
+        const b = document.querySelector(`.rig .row[data-end="${id}"]`);
+        const c = document.querySelector(`.rig .row[data-ref="${ref}"]`);
+        if (a) a.classList.add("on");
+        if (b) b.classList.add("on-b");
+        if (c) c.classList.add("on-g");
+        note.innerHTML = known
+          ? `<b>${input}</b> → Lookup A gives <b>${id}</b> → target <b>${endLabel[id]}</b>, resolved via <b>${ref}</b>.`
+          : `<b>${input}</b> isn't mapped → falls back to <b>default</b> → <b>${id}</b> (${endLabel[id]}). No guessing, no failure.`;
+      }
+      document.querySelectorAll("[data-trace]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          document
+            .querySelectorAll("[data-trace]")
+            .forEach((x) => x.classList.remove("act"));
+          if (btn.dataset.trace !== "reset") btn.classList.add("act");
+          trace(btn.dataset.trace);
+        });
+      });
+
+      /* ---------- quiz (replace with real questions; a = 0-based correct index) ---------- */
+      const QUIZ = [
+        {
+          q: "A representative question about the fallback behavior?",
+          opts: [
+            "A wrong-but-plausible option",
+            "The correct option",
+            "Another distractor",
+            "Another distractor",
+          ],
+          a: 1,
+          e: "One-line explanation of why the answer is correct.",
+        },
+        {
+          q: "A question testing the key design decision?",
+          opts: [
+            "Distractor",
+            "Distractor",
+            "The correct option",
+            "Distractor",
+          ],
+          a: 2,
+          e: "One-line explanation.",
+        },
+        {
+          q: "A question about the data flow or ordering?",
+          opts: [
+            "The correct option",
+            "Distractor",
+            "Distractor",
+            "Distractor",
+          ],
+          a: 0,
+          e: "One-line explanation.",
+        },
+        {
+          q: "A question about a safety or edge-case rule?",
+          opts: [
+            "Distractor",
+            "Distractor",
+            "Distractor",
+            "The correct option",
+          ],
+          a: 3,
+          e: "One-line explanation.",
+        },
+      ];
+      const quizEl = document.getElementById("quiz");
+      const letters = ["A", "B", "C", "D"];
+      QUIZ.forEach((item, i) => {
+        const card = document.createElement("div");
+        card.className = "q";
+        const h = document.createElement("div");
+        h.className = "qh";
+        h.innerHTML = `<span class="n">Q${i + 1}</span>${item.q}`;
+        card.appendChild(h);
+        item.opts.forEach((o, j) => {
+          const b = document.createElement("button");
+          b.className = "opt";
+          b.innerHTML = `<span class="mk">${letters[j]}</span>${o}`;
+          b.addEventListener("click", () => {
+            if (card.dataset.done) return;
+            card.dataset.done = "1";
+            card.querySelectorAll(".opt").forEach((btn, k) => {
+              if (k === item.a) btn.classList.add("correct");
+              else if (k === j) btn.classList.add("wrong");
+              btn.style.cursor = "default";
+            });
+            card.querySelector(".expl").classList.add("show");
+          });
+          card.appendChild(b);
+        });
+        const exp = document.createElement("div");
+        exp.className = "expl";
+        exp.innerHTML = `<b>${letters[item.a]} is correct.</b> ${item.e}`;
+        card.appendChild(exp);
+        quizEl.appendChild(card);
+      });
+
+      /* ---------- TOC scrollspy ---------- */
+      const links = [...document.querySelectorAll("#tocList a")];
+      const map = new Map(
+        links.map((a) => [a.getAttribute("href").slice(1), a]),
+      );
+      const spy = new IntersectionObserver(
+        (es) => {
+          es.forEach((e) => {
+            if (e.isIntersecting) {
+              links.forEach((l) => l.classList.remove("active"));
+              const a = map.get(e.target.id);
+              if (a) a.classList.add("active");
+            }
+          });
+        },
+        { rootMargin: "-20% 0px -70% 0px" },
+      );
+      document.querySelectorAll("section[id]").forEach((s) => spy.observe(s));
+    </script>
+  </body>
+</html>

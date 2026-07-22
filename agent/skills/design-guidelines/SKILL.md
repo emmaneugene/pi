@@ -1,6 +1,7 @@
 ---
 name: design-guidelines
 description: Preferred approach to interface design, UI polish, and motion. Use when designing, implementing, or reviewing user interfaces, animations, gesture-driven interactions, springs, drag/swipe/sheet behavior, materials, typography, interaction feedback, reduced motion, or overall product craft.
+disable-model-invocation: false
 source: adapted from https://github.com/emilkowalski/skills
 ---
 

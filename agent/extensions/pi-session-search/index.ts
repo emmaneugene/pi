@@ -1,36 +1,112 @@
-/*
-Copyright 2026 Adobe. All rights reserved.
-This file is licensed to you under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License. You may obtain a copy
-of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under
-the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
-OF ANY KIND, either express or implied. See the License for the specific language
-governing permissions and limitations under the License.
-*/
-
 import {
+  type AgentToolResult,
   CONFIG_DIR_NAME,
   type ExtensionAPI,
   type ExtensionContext,
+  keyText,
+  type ToolRenderResultOptions,
+  truncateToVisualLines,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { createReadStream } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { stripVTControlCharacters } from "node:util";
 
 const DEFAULT_ROOT = path.join(homedir(), CONFIG_DIR_NAME, "agent", "sessions");
-const DEFAULT_MAX_BYTES = 5 * 1024 * 1024; // 5 MB per session file
+const DEFAULT_MAX_BYTES = 5 * 1024 * 1024; // 5 MB search/output cap
+const DEFAULT_MAX_LINE_BYTES = 16 * 1024 * 1024; // 16 MB per JSONL record
 const DEFAULT_SNIPPET_BEFORE = 120;
 const DEFAULT_SNIPPET_AFTER = 240;
 const DEFAULT_MAX_RESULTS = 20;
 const MAX_RESULTS_HARD_CAP = 1000;
+const MAX_READ_MESSAGES_HARD_CAP = 1000;
+const READ_TRUNCATION_NOTICE =
+  "\n\n> Output truncated at PI_SESSION_SEARCH_MAX_BYTES. Narrow the window or raise the limit.\n";
 // Per-message haystack cap before running the user-supplied regex. Bounds the
 // worst case for a pathological pattern (catastrophic backtracking). It does
 // NOT bound an exponentially-backtracking regex within those 256KB; we rely
 // on the local-trust threat model and document the limitation in the README.
 const MAX_HAYSTACK_BYTES = 256 * 1024;
+const COLLAPSED_RESULT_LINES = 8;
+
+interface RenderTheme {
+  fg(name: string, text: string): string;
+}
+
+class ExpandableResultText {
+  private readonly content: string;
+  private readonly hint: string;
+  private readonly expanded: boolean;
+  private readonly collapsedLines: number;
+
+  constructor(
+    text: string,
+    expanded: boolean,
+    collapsedLines: number,
+    theme: RenderTheme,
+  ) {
+    this.content = theme.fg("toolOutput", text);
+    this.hint = theme.fg(
+      "muted",
+      `…\n(${keyText("app.tools.expand")} to expand)`,
+    );
+    this.expanded = expanded;
+    this.collapsedLines = collapsedLines;
+  }
+
+  render(width: number): string[] {
+    const lines = truncateToVisualLines(
+      this.content,
+      Number.MAX_SAFE_INTEGER,
+      width,
+    ).visualLines;
+    if (this.expanded || lines.length <= this.collapsedLines) return lines;
+    const hint = truncateToVisualLines(
+      this.hint,
+      Number.MAX_SAFE_INTEGER,
+      width,
+    ).visualLines;
+    return [...lines.slice(0, this.collapsedLines), ...hint];
+  }
+
+  invalidate(): void {}
+}
+
+function sanitizeDisplayText(text: string): string {
+  return Array.from(stripVTControlCharacters(text))
+    .filter((character) => {
+      const codePoint = character.codePointAt(0);
+      if (codePoint === undefined) return false;
+      if (codePoint === 0x09 || codePoint === 0x0a) return true;
+      if (codePoint <= 0x1f) return false;
+      return codePoint < 0xfff9 || codePoint > 0xfffb;
+    })
+    .join("")
+    .replace(/\r/gu, "");
+}
+
+export function renderExpandableSessionResult(
+  result: Pick<AgentToolResult<unknown>, "content">,
+  options: ToolRenderResultOptions,
+  theme: RenderTheme,
+  context: { isError: boolean },
+): ExpandableResultText {
+  const text = result.content
+    .flatMap((block): string[] =>
+      block.type === "text"
+        ? [sanitizeDisplayText(block.text)]
+        : [`[image: ${block.mimeType}]`],
+    )
+    .join("\n");
+  return new ExpandableResultText(
+    text,
+    options.expanded || context.isError,
+    COLLAPSED_RESULT_LINES,
+    theme,
+  );
+}
 
 export function parseDateOrThrow(
   value: string | undefined,
@@ -48,9 +124,20 @@ export function getRoot(): string {
   return process.env.PI_SESSION_SEARCH_ROOT || DEFAULT_ROOT;
 }
 
+function getPositiveEnvInt(name: string, fallback: number): number {
+  const value = Number.parseInt(process.env[name] || "", 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 export function getMaxBytes(): number {
-  const v = Number.parseInt(process.env.PI_SESSION_SEARCH_MAX_BYTES || "", 10);
-  return Number.isFinite(v) && v > 0 ? v : DEFAULT_MAX_BYTES;
+  return getPositiveEnvInt("PI_SESSION_SEARCH_MAX_BYTES", DEFAULT_MAX_BYTES);
+}
+
+export function getMaxLineBytes(): number {
+  return getPositiveEnvInt(
+    "PI_SESSION_SEARCH_MAX_LINE_BYTES",
+    DEFAULT_MAX_LINE_BYTES,
+  );
 }
 
 /**
@@ -60,11 +147,13 @@ export function getMaxBytes(): number {
  * - Any other input that is not a finite integer in [1, MAX_RESULTS_HARD_CAP]
  *   (NaN, Infinity, 0, negative, fractional, non-number) → throws.
  *
- * Silently coercing an explicit invalid value (`0` becoming 20, `-5` becoming
- * 20) is surprising; we reject loudly instead. The TypeBox schema enforces
- * the same range at the tool-call layer, so the throw path is mainly for
- * programmatic callers and slash-command misuse (the slash-command parser
- * already validates `--max=` separately and never reaches here with garbage).
+ * Silently coercing an explicit invalid value is surprising (`0` becoming 20,
+ * `-5` becoming 20). This function rejects loudly instead.
+ *
+ * The TypeBox schema enforces the same range at the tool-call layer, so this
+ * throw path mainly serves programmatic callers and slash-command misuse.
+ * The slash-command parser already validates `--max=` separately and never
+ * reaches this function with garbage input.
  */
 export function validateMaxResults(raw: unknown): number {
   if (raw === undefined || raw === null) return DEFAULT_MAX_RESULTS;
@@ -97,23 +186,27 @@ export function decodeSessionDirName(name: string): string {
 /**
  * Compile a user-supplied query string into a RegExp.
  *
- * - `/pattern/flags` form (slash-delimited regex syntax — *not* full JS
- *   literal parsing; embedded slashes inside the pattern aren't treated
- *   specially, so `/a/b/c` parses as body `a/b` with flags `c`, which then
- *   throws because `c` isn't a valid flag): respects user flags **except**
- *   `g` and `y`, which are stripped because they break the rest of the
- *   search loop:
- *     - `g` makes `String.prototype.match()` return an array without `.index`,
- *       which would silently make every snippet start at offset 0.
- *     - `y` (sticky) maintains internal `lastIndex` state across calls and
- *       leads to non-deterministic matches when the same compiled regex is
- *       reused across haystacks.
- *   Case-sensitivity is honored: `/Foo/` is case-sensitive, `/Foo/i` is
- *   case-insensitive. Empty regex (`//`) is rejected by the `.+` in the
- *   matcher — it would match every position and be useless anyway.
- * - Plain string form: literal substring search, escaped against regex
- *   metacharacters, always case-insensitive (matches the historical default
- *   and is documented as such).
+ * - `/pattern/flags` form: slash-delimited regex syntax, not full JS literal
+ *   parsing.
+ *     - Embedded slashes inside the pattern have no special meaning. For
+ *       example, `/a/b/c` parses as body `a/b` with flags `c`. `c` is not a
+ *       valid flag, so this throws.
+ *     - This form respects user flags except `g` and `y`. It strips those
+ *       two flags because they break the rest of the search loop:
+ *         - `g` makes `String.prototype.match()` return an array without
+ *           `.index`. If the code did not strip `g`, every snippet would
+ *           silently start at offset 0 instead of the real match position.
+ *         - `y` (sticky) keeps internal `lastIndex` state across calls. That
+ *           state causes non-deterministic matches when the code reuses the
+ *           same compiled regex across haystacks.
+ *     - Case sensitivity follows the flags as written: `/Foo/` is
+ *       case-sensitive, `/Foo/i` is case-insensitive.
+ *     - An empty regex (`//`) is rejected. The matcher requires `.+` for the
+ *       pattern, and an empty pattern would match every position and be
+ *       useless, so `.+` correctly rejects it.
+ * - Plain string form: literal substring search. This form escapes regex
+ *   metacharacters and is always case-insensitive, matching the documented
+ *   historical default.
  */
 export function compileQuery(q: string): RegExp {
   const m = q.match(/^\/(.+)\/([gimsuy]*)$/);
@@ -307,9 +400,9 @@ export async function searchSessions(
       } catch {
         continue;
       }
-      // Use the filename timestamp (session start) for since/until rather than
-      // mtime, which reflects the last write and would let an old conversation
-      // pass a recent `since` filter.
+      // Use the filename timestamp (session start) for since/until, not
+      // mtime. mtime reflects the last write, so it would let an old
+      // conversation pass a recent `since` filter.
       const startMs = parseSessionFileTimestamp(f) || st.mtimeMs;
       if (sinceMs && startMs < sinceMs) continue;
       if (untilMs && startMs > untilMs) continue;
@@ -404,19 +497,139 @@ export async function searchSessions(
   return { hits, scannedFiles, skippedFiles, truncated };
 }
 
+interface SessionEntry {
+  ts: number;
+  role: "user" | "assistant";
+  content: unknown;
+}
+
+function hasReadableContent(
+  role: "user" | "assistant",
+  content: unknown,
+): boolean {
+  if (typeof content === "string") return content.length > 0;
+  if (!Array.isArray(content)) return false;
+  return content.some((block) => {
+    if (!block || typeof block !== "object") return false;
+    const value = block as { type?: string; text?: string; name?: string };
+    if (value.type === "text") return Boolean(value.text);
+    return (
+      role === "assistant" && value.type === "toolCall" && Boolean(value.name)
+    );
+  });
+}
+
+function parseSessionEntry(obj: any): SessionEntry | null {
+  if (obj.type !== "message") return null;
+  const msg = obj.message;
+  const role = msg?.role;
+  if (role !== "user" && role !== "assistant") return null;
+  if (!hasReadableContent(role, msg.content)) return null;
+  return {
+    ts: Date.parse(String(obj.timestamp ?? "")) || 0,
+    role,
+    content: msg.content,
+  };
+}
+
+function formatSessionEntry(entry: SessionEntry): string {
+  const text = extractText(entry.content);
+  const tools =
+    entry.role === "assistant" ? extractToolCallText(entry.content) : "";
+  return [text, tools].filter(Boolean).join("\n");
+}
+
+async function forEachJsonLine(
+  file: string,
+  visit: (obj: any) => boolean | void,
+): Promise<void> {
+  const input = createReadStream(file);
+  const maxLineBytes = getMaxLineBytes();
+  let lineParts: Buffer[] = [];
+  let lineBytes = 0;
+
+  const visitLine = (): boolean => {
+    if (lineBytes === 0) return true;
+    let line = Buffer.concat(lineParts, lineBytes).toString("utf8");
+    if (line.endsWith("\r")) line = line.slice(0, -1);
+    lineParts = [];
+    lineBytes = 0;
+    let obj: any;
+    try {
+      obj = JSON.parse(line);
+    } catch {
+      return true;
+    }
+    return visit(obj) !== false;
+  };
+
+  try {
+    for await (const chunk of input) {
+      const bytes = chunk as Buffer;
+      let offset = 0;
+      while (offset < bytes.length) {
+        const newline = bytes.indexOf(0x0a, offset);
+        const end = newline === -1 ? bytes.length : newline;
+        const part = bytes.subarray(offset, end);
+        if (lineBytes + part.length > maxLineBytes) {
+          throw new Error(
+            `Refusing to read session record larger than PI_SESSION_SEARCH_MAX_LINE_BYTES (${maxLineBytes}).`,
+          );
+        }
+        if (part.length > 0) {
+          lineParts.push(part);
+          lineBytes += part.length;
+        }
+        if (newline === -1) break;
+        if (!visitLine()) return;
+        offset = newline + 1;
+      }
+    }
+    visitLine();
+  } finally {
+    input.destroy();
+  }
+}
+
+function validateReadCount(
+  value: number | undefined,
+  fallback: number,
+  label: string,
+  minimum: number,
+): number {
+  const parsed = value ?? fallback;
+  if (
+    !Number.isInteger(parsed) ||
+    parsed < minimum ||
+    parsed > MAX_READ_MESSAGES_HARD_CAP
+  ) {
+    throw new Error(
+      `${label} must be an integer in [${minimum}, ${MAX_READ_MESSAGES_HARD_CAP}]; got ${String(parsed)}`,
+    );
+  }
+  return parsed;
+}
+
+function truncateUtf8(value: string, maxBytes: number): string {
+  if (maxBytes <= 0) return "";
+  const encoded = Buffer.from(value, "utf8");
+  if (encoded.length <= maxBytes) return value;
+  return encoded
+    .subarray(0, maxBytes)
+    .toString("utf8")
+    .replace(/\uFFFD$/, "");
+}
+
 export async function readSessionWindow(opts: {
   sessionFile: string;
   aroundTimestamp?: string;
   contextMessages?: number;
   maxMessages?: number;
 }): Promise<string> {
-  const input = opts.sessionFile;
   const root = getRoot();
-  // Accept either an absolute path or a path relative to the configured
-  // sessions root (search_sessions returns the latter).
-  const candidate = path.isAbsolute(input) ? input : path.join(root, input);
-  // Resolve symlinks on both sides before the prefix check so a symlink placed
-  // inside the sessions root cannot point this tool at arbitrary files.
+  const candidate = path.isAbsolute(opts.sessionFile)
+    ? opts.sessionFile
+    : path.join(root, opts.sessionFile);
   let resolvedRoot: string;
   let resolvedFile: string;
   try {
@@ -427,8 +640,6 @@ export async function readSessionWindow(opts: {
   try {
     resolvedFile = await realpath(candidate);
   } catch {
-    // File doesn't exist or isn't accessible; fall back to lexical resolution
-    // so we still produce a clear error below rather than leaking an ENOENT.
     resolvedFile = path.resolve(candidate);
   }
   if (
@@ -438,93 +649,105 @@ export async function readSessionWindow(opts: {
     throw new Error(`Refusing to read outside session root: ${resolvedRoot}`);
   }
 
-  // Stat-then-cap so a pathological multi-GB session file doesn't OOM the
-  // pi process. Same MAX_BYTES policy as search_sessions — if the file is
-  // too big to be searched it's also too big to be window-read.
-  const maxBytes = getMaxBytes();
-  let st;
   try {
-    st = await stat(resolvedFile);
+    await stat(resolvedFile);
   } catch (e) {
     throw new Error(`Could not stat session file: ${(e as Error).message}`);
   }
-  if (st.size > maxBytes) {
-    throw new Error(
-      `Refusing to read session file: size ${st.size} exceeds PI_SESSION_SEARCH_MAX_BYTES (${maxBytes}). ` +
-        `Raise the env var to read this file (memory permitting), or trim the session manually.`,
-    );
-  }
 
-  const raw = await readFile(resolvedFile, "utf8");
-  const lines = raw.split("\n").filter(Boolean);
-  const entries: Array<{ ts: number; role: string; text: string }> = [];
+  const contextMessages = validateReadCount(
+    opts.contextMessages,
+    6,
+    "contextMessages",
+    0,
+  );
+  const maxMessages = validateReadCount(opts.maxMessages, 30, "maxMessages", 1);
+  const target = opts.aroundTimestamp
+    ? parseDateOrThrow(opts.aroundTimestamp, "aroundTimestamp")
+    : null;
+
   let header: any = null;
+  let entryCount = 0;
+  let nearestIndex = 0;
+  let nearestDifference = Infinity;
 
-  for (const line of lines) {
-    let obj: any;
-    try {
-      obj = JSON.parse(line);
-    } catch {
-      continue;
-    }
+  // The first pass scans the complete source to find exact message indexes
+  // without retaining transcript text. The second pass below streams from the
+  // beginning through the selected window. Memory is independent of source
+  // size, but each call performs work proportional to the source file size.
+  await forEachJsonLine(resolvedFile, (obj) => {
     if (obj.type === "session") {
       header = obj;
-      continue;
+      return;
     }
-    if (obj.type !== "message") continue;
-    const msg = obj.message;
-    const role = msg?.role;
-    if (role !== "user" && role !== "assistant") continue;
-    const text = extractText(msg?.content);
-    const tools = role === "assistant" ? extractToolCallText(msg?.content) : "";
-    const combined = [text, tools].filter(Boolean).join("\n");
-    if (!combined) continue;
-    entries.push({
-      ts: Date.parse(String(obj.timestamp ?? "")) || 0,
-      role,
-      text: combined,
+    const entry = parseSessionEntry(obj);
+    if (!entry) return;
+    if (target !== null) {
+      const difference = Math.abs(entry.ts - target);
+      if (difference < nearestDifference) {
+        nearestDifference = difference;
+        nearestIndex = entryCount;
+      }
+    }
+    entryCount += 1;
+  });
+
+  let startIdx =
+    target === null ? 0 : Math.max(0, nearestIndex - contextMessages);
+  let endIdx =
+    target === null
+      ? entryCount
+      : Math.min(entryCount, nearestIndex + contextMessages + 1);
+  if (endIdx - startIdx > maxMessages) endIdx = startIdx + maxMessages;
+
+  const maxOutputBytes = getMaxBytes();
+  const out: string[] = [];
+  let outputBytes = 0;
+  let outputTruncated = false;
+  const appendOutput = (value: string): boolean => {
+    const valueBytes = Buffer.byteLength(value, "utf8");
+    const remaining = maxOutputBytes - outputBytes;
+    if (valueBytes <= remaining) {
+      out.push(value);
+      outputBytes += valueBytes;
+      return true;
+    }
+    out.push(truncateUtf8(value, remaining));
+    outputBytes = maxOutputBytes;
+    outputTruncated = true;
+    return false;
+  };
+
+  const sessionHeading = header
+    ? `# Session ${header.id} — cwd: ${header.cwd} — started: ${header.timestamp}\n`
+    : "";
+  const shownStart = entryCount === 0 ? 0 : startIdx + 1;
+  appendOutput(
+    `${sessionHeading}# Showing messages ${shownStart}–${endIdx} of ${entryCount}\n\n`,
+  );
+
+  let currentIndex = 0;
+  if (!outputTruncated) {
+    await forEachJsonLine(resolvedFile, (obj) => {
+      const entry = parseSessionEntry(obj);
+      if (!entry) return;
+      const index = currentIndex;
+      currentIndex += 1;
+      if (index < startIdx) return;
+      if (index >= endIdx) return false;
+      const block = `## ${entry.role} @ ${new Date(entry.ts).toISOString()}\n${formatSessionEntry(entry)}\n\n`;
+      if (!appendOutput(block)) return false;
     });
   }
 
-  let startIdx = 0;
-  let endIdx = entries.length;
-  const ctx = opts.contextMessages ?? 6;
-  const max = opts.maxMessages ?? 30;
-
-  if (opts.aroundTimestamp) {
-    const target = Date.parse(opts.aroundTimestamp);
-    if (Number.isFinite(target)) {
-      let nearest = 0;
-      let bestDiff = Infinity;
-      for (let i = 0; i < entries.length; i++) {
-        const diff = Math.abs(entries[i].ts - target);
-        if (diff < bestDiff) {
-          bestDiff = diff;
-          nearest = i;
-        }
-      }
-      startIdx = Math.max(0, nearest - ctx);
-      endIdx = Math.min(entries.length, nearest + ctx + 1);
-    }
-  }
-
-  if (endIdx - startIdx > max) endIdx = startIdx + max;
-
-  const out: string[] = [];
-  if (header) {
-    out.push(
-      `# Session ${header.id} — cwd: ${header.cwd} — started: ${header.timestamp}`,
-    );
-  }
-  out.push(`# Showing messages ${startIdx + 1}–${endIdx} of ${entries.length}`);
-  out.push("");
-  for (let i = startIdx; i < endIdx; i++) {
-    const e = entries[i];
-    out.push(`## ${e.role} @ ${new Date(e.ts).toISOString()}`);
-    out.push(e.text);
-    out.push("");
-  }
-  return out.join("\n");
+  const output = out.join("");
+  if (!outputTruncated) return output;
+  const notice = truncateUtf8(READ_TRUNCATION_NOTICE, maxOutputBytes);
+  const body = truncateUtf8(
+    output,
+    Math.max(0, maxOutputBytes - Buffer.byteLength(notice, "utf8")),
+  );
+  return body + notice;
 }
 
 export function formatHitsForCommand(result: SearchResult): string {
@@ -720,6 +943,7 @@ export default function (pi: ExtensionAPI) {
         };
       }
     },
+    renderResult: renderExpandableSessionResult,
   });
 
   pi.registerTool({
@@ -778,6 +1002,7 @@ export default function (pi: ExtensionAPI) {
         };
       }
     },
+    renderResult: renderExpandableSessionResult,
   });
 
   pi.registerCommand("find-sessions", {

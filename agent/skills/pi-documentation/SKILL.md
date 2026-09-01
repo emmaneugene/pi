@@ -1,7 +1,6 @@
 ---
 name: pi-documentation
 description: Consult the documentation, examples, and public API declarations bundled with the active Pi installation. Use whenever a task concerns Pi itself, including its CLI, configuration, resources, extension APIs, SDK, TUI, providers, sessions, or other current and future Pi features.
-disable-model-invocation: false
 ---
 
 # Pi documentation

@@ -1,78 +1,33 @@
-import {
-  type ExtensionAPI,
-  type ToolInfo,
-} from "@earendil-works/pi-coding-agent";
-import { showCatalog, type CatalogEntry } from "../../lib/tui/picker.ts";
-
-const sourceLabel = (tool: ToolInfo): string => {
-  const source = tool.sourceInfo?.source;
-  if (!source || source === "builtin") return "builtin";
-  if (source === "sdk") return "sdk";
-  return "extension";
-};
-
-/** Render every available detail of a tool into a markdown artefact. */
-const toolDoc = (tool: ToolInfo, active: boolean): string => {
-  const guidelines = tool.promptGuidelines ?? [];
-  const lines: string[] = [
-    `# ${tool.name}`,
-    "",
-    `- source: ${sourceLabel(tool)}`,
-    `- active: ${active ? "yes" : "no"}`,
-    "",
-    "## Description",
-    "",
-    tool.description?.trim() || "No description",
-    "",
-  ];
-  if (guidelines.length > 0) {
-    lines.push(
-      "## Prompt guidelines",
-      "",
-      ...guidelines.map((g) => `- ${g}`),
-      "",
-    );
-  }
-  lines.push(
-    "## Parameters (schema)",
-    "",
-    "```json",
-    JSON.stringify(tool.parameters ?? {}, null, 2),
-    "```",
-    "",
-  );
-  return lines.join("\n");
-};
-
-const toEntry = (tool: ToolInfo, active: boolean): CatalogEntry => {
-  const mark = active ? "✔" : "✘";
-  const oneLine = (tool.description?.trim() || "No description")
-    .replace(/\s+/g, " ")
-    .trim();
-  return {
-    item: {
-      value: tool.name,
-      label: tool.name,
-      description: `(${sourceLabel(tool)}) ${mark}  ${oneLine}`,
-    },
-    artifact: () => ({ content: toolDoc(tool, active), ext: ".md" }),
-  };
-};
+/**
+ * tools — everything about the agent's tool surface:
+ *
+ * Overrides of pi built-ins:
+ * - bash/: default 300s timeout on the bash tool, with a timeout message
+ *   that explains how to proceed.
+ * - edit/: edits[].replaceAll on the edit tool, plus line-numbered
+ *   duplicate-match errors.
+ *
+ * Additional tools:
+ * - ask-user-question/: AskUserQuestion collects structured answers via TUI.
+ * - read-image.ts: read_image delegates image analysis to a vision model.
+ * - get-models.ts: get_models lists session-scoped models for the LLM.
+ *
+ * Introspection:
+ * - show-tools.ts: /show-tools catalog of all tools with documentation.
+ */
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import askUserQuestion from "./ask-user-question/index.ts";
+import bashTimeout from "./bash/index.ts";
+import editReplaceAll from "./edit/index.ts";
+import getModels from "./get-models.ts";
+import readImage from "./read-image.ts";
+import showTools from "./show-tools.ts";
 
 export default function (pi: ExtensionAPI) {
-  pi.registerCommand("show-tools", {
-    description: "Show tools available to the agent in this session",
-    handler: async (_args, ctx) => {
-      const activeNames = new Set(pi.getActiveTools());
-      const tools = pi
-        .getAllTools()
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-      await showCatalog(
-        ctx,
-        "Tools",
-        tools.map((t) => toEntry(t, activeNames.has(t.name))),
-      );
-    },
-  });
+  bashTimeout(pi);
+  editReplaceAll(pi);
+  askUserQuestion(pi);
+  readImage(pi);
+  getModels(pi);
+  showTools(pi);
 }

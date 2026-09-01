@@ -17,14 +17,31 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import { SUPPRESS_AGENT_END_NOTIFICATION_ENTRY } from "../../lib/session-notification-policy.ts";
+import { textContent } from "./content.ts";
 import { detectEnv } from "./env.ts";
-import { filterActiveTools, resolveAllowedTools } from "./gating.ts";
+import {
+  DENIED_TOOLS,
+  filterActiveTools,
+  resolveAllowedTools,
+} from "./gating.ts";
 import { buildAgentPrompt } from "./prompts.ts";
+import { type TurnOutcome, willContinue } from "./steer-guard.ts";
 import type { AgentConfig, ThinkingLevel } from "./types.ts";
 
 /** Streaming callbacks the manager wires to a record + widget. */
 export interface RunCallbacks {
-  onToolActivity?: (a: { type: "start" | "end"; toolName: string }) => void;
+  /** `args` is present only on "start", where it identifies the call. */
+  onToolActivity?: (
+    a:
+      | {
+          type: "start";
+          toolCallId: string;
+          toolName: string;
+          args: unknown;
+        }
+      | { type: "end"; toolCallId: string; toolName: string },
+  ) => void;
   onTurnEnd?: (turnCount: number) => void;
   onAssistantUsage?: (u: {
     input: number;
@@ -39,7 +56,7 @@ export interface RunCallbacks {
 export interface RunOptions {
   pi: ExtensionAPI;
   agentId: string;
-  /** Explicit model override (already resolved). Falls back to config/parent. */
+  /** Effective model, resolved by the manager. Undefined uses the session default. */
   model?: Model<any>;
   maxTurns?: number;
   graceTurns?: number;
@@ -53,13 +70,19 @@ export interface RunResult {
   session: AgentSession;
   aborted: boolean;
   steered: boolean;
+  /** Why the child's last assistant message ended, for termination reporting. */
+  stopReason?: string;
+  /** Raw provider error. Sanitize before surfacing; see termination.ts. */
+  errorMessage?: string;
 }
 
 /**
- * Persist child transcripts under `<sessionDir>/subagents/<parentSessionId>/`,
- * so ownership is structural: every session's children live in their own
- * folder rather than sharing a flat dir filtered by header. Falls back to a
- * temp dir in headless mode (no parent dir / id available).
+ * Persist child transcripts under `<sessionDir>/subagents/<parentSessionId>/`.
+ * This makes ownership structural: every session's children live in their
+ * own folder, instead of sharing one flat dir filtered by header.
+ *
+ * This function falls back to a temp dir in headless mode, when no parent
+ * dir or id is available.
  */
 export function deriveChildSessionDir(
   ctx: ExtensionContext,
@@ -75,35 +98,15 @@ export function deriveChildSessionDir(
   return join(tmpdir(), "pi-subagents-sessions");
 }
 
-/** Resolve config.model ("provider/id" or fuzzy substring) against the registry. */
-export function resolveModel(
-  input: string | undefined,
-  registry: ExtensionContext["modelRegistry"],
-  parent: Model<any> | undefined,
-): Model<any> | undefined {
-  if (!input) return parent;
-  const available = registry.getAvailable?.() ?? [];
-  // exact provider/id
-  const slash = input.indexOf("/");
-  if (slash !== -1) {
-    const found = registry.find(input.slice(0, slash), input.slice(slash + 1));
-    if (
-      found &&
-      available.some((m) => m.provider === found.provider && m.id === found.id)
-    ) {
-      return found;
-    }
-  }
-  // fuzzy: first available model whose id contains the input
-  const lower = input.toLowerCase();
-  const fuzzy = available.find((m) => m.id.toLowerCase().includes(lower));
-  return fuzzy ?? parent;
-}
-
-/** Normalize max turns. undefined/0 -> unlimited; else min 1. */
+/**
+ * Normalize max turns. undefined/0 -> unlimited; else a whole number >= 1.
+ *
+ * The tool schema accepts any number, so this function floors it. The turn
+ * counter only ever hits integers, so a budget of 2.5 becomes a budget of 2.
+ */
 export function normalizeMaxTurns(n: number | undefined): number | undefined {
-  if (n == null || n === 0) return undefined;
-  return Math.max(1, n);
+  if (n == null || !Number.isFinite(n) || n === 0) return undefined;
+  return Math.max(1, Math.floor(n));
 }
 
 export async function runChildSession(
@@ -112,6 +115,34 @@ export async function runChildSession(
   prompt: string,
   options: RunOptions,
   callbacks: RunCallbacks,
+): Promise<RunResult> {
+  // Attach before the body's first await: AbortSignal does not replay, so a
+  // listener registered after the async construction would miss an abort
+  // during it. The finally removes it on every path, including failures.
+  const liveSessionRef: { session?: AgentSession } = {};
+  const onAbort = () => void liveSessionRef.session?.abort();
+  options.signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    return await runChildSessionBody(
+      ctx,
+      config,
+      prompt,
+      options,
+      callbacks,
+      liveSessionRef,
+    );
+  } finally {
+    options.signal?.removeEventListener("abort", onAbort);
+  }
+}
+
+async function runChildSessionBody(
+  ctx: ExtensionContext,
+  config: AgentConfig,
+  prompt: string,
+  options: RunOptions,
+  callbacks: RunCallbacks,
+  liveSessionRef: { session?: AgentSession },
 ): Promise<RunResult> {
   const cwd = ctx.cwd;
   const env = await detectEnv(options.pi, cwd);
@@ -122,7 +153,8 @@ export async function runChildSession(
     ctx.getSystemPrompt(),
   );
 
-  // Point 1: gate built-ins and the initial active set.
+  // Point 1: gate built-ins and the initial active set. `undefined` means every
+  // tool, which pi reads as "default built-ins plus all extension tools".
   const tools = resolveAllowedTools(config);
 
   // 3. Suppress pi's AGENTS.md/APPEND_SYSTEM re-append. buildSystemPrompt()
@@ -140,9 +172,6 @@ export async function runChildSession(
   // 4. reload() before createSession — ordering dependency with no type signal.
   await loader.reload();
 
-  const model =
-    options.model ?? resolveModel(config.model, ctx.modelRegistry, ctx.model);
-
   // Child transcripts are pi-native JSONL, linked to the current session.
   // Headless mode falls back to a temp dir.
   let parentSessionId: string | undefined;
@@ -155,6 +184,9 @@ export async function runChildSession(
   const sessionManager = SessionManager.create(cwd, sessionDir, {
     parentSession: parentSessionId,
   });
+  // The parent reports child completion. Suppress this session's own desktop
+  // notification without coupling notification policy to prompt contents.
+  sessionManager.appendCustomEntry(SUPPRESS_AGENT_END_NOTIFICATION_ENTRY);
   const transcriptFile = sessionManager.getSessionFile();
   callbacks.onTranscript?.(transcriptFile);
 
@@ -163,14 +195,16 @@ export async function runChildSession(
     agentDir: getAgentDir(),
     sessionManager,
     settingsManager: SettingsManager.create(cwd, getAgentDir()),
-    modelRegistry: ctx.modelRegistry,
-    model,
-    tools, // 1. explicit allowlist
+    model: options.model,
+    ...(tools ? { tools } : {}), // 1. explicit allowlist, when there is one
+    // The denylist is pi's to enforce too, not only ours below.
+    excludeTools: [...DENIED_TOOLS],
     resourceLoader: loader,
     ...((options.thinkingLevel ?? config.thinking)
       ? { thinkingLevel: options.thinkingLevel ?? config.thinking }
       : {}),
   });
+  liveSessionRef.session = session;
 
   session.setSessionName(
     `${config.displayName ?? config.name}#${options.agentId.slice(0, 8)}`,
@@ -179,10 +213,21 @@ export async function runChildSession(
   // Bind extensions so extension tools register.
   await session.bindExtensions({});
 
-  // 2. Extension tools register after bindExtensions; strip every unlisted tool.
+  // 2. Extension tools register only after bindExtensions, so this step
+  // re-applies both rules.
+  //
+  // Without an allowlist, this activates every registered tool except denied
+  // tools. Pi's default active set is only read/bash/edit/write, so "every
+  // tool" requires an explicit request; it is not the default.
   const active = session.getActiveToolNames();
-  const guarded = filterActiveTools(active, config);
-  if (guarded.length !== active.length) session.setActiveToolsByName(guarded);
+  const candidates = tools
+    ? active
+    : session.getAllTools().map((tool) => tool.name);
+  const guarded = filterActiveTools(candidates, config);
+  const changed =
+    guarded.length !== active.length ||
+    guarded.some((name, i) => name !== active[i]);
+  if (changed) session.setActiveToolsByName(guarded);
 
   callbacks.onSessionCreated?.(session);
 
@@ -196,17 +241,27 @@ export async function runChildSession(
   // 6. Result collection: accumulate text_delta between message boundaries.
   let currentText = "";
   let lastFullText = "";
+  let lastStopReason: string | undefined;
+  let lastErrorMessage: string | undefined;
 
   const unsub = session.subscribe((event: AgentSessionEvent) => {
     if (event.type === "turn_end") {
       turnCount++;
       callbacks.onTurnEnd?.(turnCount);
       if (maxTurns != null) {
+        const outcome = (event.message as { stopReason?: TurnOutcome })
+          .stopReason;
+        // Latched on reaching the limit, not on steering, so a child that
+        // stopped on its own still reaches the grace abort below.
         if (!softLimitReached && turnCount >= maxTurns) {
           softLimitReached = true;
-          void session.steer(
-            "You have reached your turn limit. Wrap up immediately — provide your final answer now.",
-          );
+          // Steering a settled session restarts it, so only nudge a child that
+          // was going to take another turn regardless.
+          if (willContinue(outcome)) {
+            void session.steer(
+              "You have reached your turn limit. Wrap up immediately — provide your final answer now.",
+            );
+          }
         } else if (softLimitReached && turnCount >= maxTurns + grace) {
           aborted = true;
           void session.abort();
@@ -222,12 +277,25 @@ export async function runChildSession(
       lastFullText = currentText;
     }
     if (event.type === "tool_execution_start") {
-      callbacks.onToolActivity?.({ type: "start", toolName: event.toolName });
+      callbacks.onToolActivity?.({
+        type: "start",
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+        args: event.args,
+      });
     }
     if (event.type === "tool_execution_end") {
-      callbacks.onToolActivity?.({ type: "end", toolName: event.toolName });
+      callbacks.onToolActivity?.({
+        type: "end",
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+      });
     }
     if (event.type === "message_end" && event.message.role === "assistant") {
+      // A provider failure does not throw; it arrives here instead.
+      const m = event.message as { stopReason?: string; errorMessage?: string };
+      lastStopReason = m.stopReason;
+      lastErrorMessage = m.errorMessage;
       const u = (event.message as any).usage;
       if (u) {
         callbacks.onAssistantUsage?.({
@@ -239,9 +307,12 @@ export async function runChildSession(
     }
   });
 
-  // 7. forward parent abort -> child abort.
-  const onAbort = () => void session.abort();
-  options.signal?.addEventListener("abort", onAbort, { once: true });
+  // An abort during construction must not start a turn; upstream already
+  // marked the record stopped.
+  if (options.signal?.aborted) {
+    unsub();
+    return { responseText: "", session, aborted: false, steered: false };
+  }
 
   // inherit_context: prepend a compact parent transcript (optional, off by default).
   const effectivePrompt = options.inheritContext
@@ -252,33 +323,28 @@ export async function runChildSession(
     await session.prompt(effectivePrompt);
   } finally {
     unsub();
-    options.signal?.removeEventListener("abort", onAbort);
   }
 
   const responseText = lastFullText.trim() || getLastAssistantText(session);
-  return { responseText, session, aborted, steered: softLimitReached };
+  return {
+    responseText,
+    session,
+    aborted,
+    steered: softLimitReached,
+    stopReason: lastStopReason,
+    errorMessage: lastErrorMessage,
+  };
 }
-
-// ── helpers ──────────────────────────────────────────────────────────────────
 
 function getLastAssistantText(session: AgentSession): string {
   const msgs = session.messages;
   for (let i = msgs.length - 1; i >= 0; i--) {
     const m = msgs[i];
     if (m.role !== "assistant") continue;
-    const text = extractText((m as any).content).trim();
+    const text = textContent((m as any).content).trim();
     if (text) return text;
   }
   return "";
-}
-
-function extractText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .filter((c: any) => c?.type === "text" && typeof c.text === "string")
-    .map((c: any) => c.text)
-    .join("");
 }
 
 const MAX_PARENT_MESSAGES = 12;
@@ -297,7 +363,7 @@ function buildParentContext(ctx: ExtensionContext): string {
 
     const lines: string[] = [];
     for (const m of messages as any[]) {
-      const text = extractText(m.content).trim();
+      const text = textContent(m.content).trim();
       if (!text) continue;
       lines.push(
         `## ${String(m.role).toUpperCase()}\n${truncate(text, MAX_PARENT_MESSAGE_CHARS)}`,

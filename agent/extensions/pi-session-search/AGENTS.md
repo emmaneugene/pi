@@ -53,8 +53,6 @@ npm run typecheck  # tsc --noEmit against tsconfig.check.json
 - The implementation is a single `index.ts` file by design; resist the
   urge to split it unless the file actually outgrows readability.
 - No new runtime dependencies without discussion.
-- Apache-2.0 header on every new `.ts` file, copyright
-  `2026 Adobe`. Match the format of the existing source.
 
 ## Commit / PR hygiene
 
@@ -79,8 +77,11 @@ without an explicit discussion on the PR:
 - **`realpath` containment.** Both per-subdirectory and per-file. A
   `.jsonl` symlinked outside the configured sessions root must be
   detected and skipped. Don't substitute `lstat`-only checks.
-- **Per-file size cap** (`PI_SESSION_SEARCH_MAX_BYTES`, default 5 MB).
-  A pathological session file must not be able to OOM the process.
+- **Bounded transcript I/O.** `search_sessions` skips source files over
+  `PI_SESSION_SEARCH_MAX_BYTES`. `read_session` streams source files, rejects
+  individual JSONL records over `PI_SESSION_SEARCH_MAX_LINE_BYTES`, and caps
+  returned output. A large transcript or record must not be loaded into memory
+  as one unbounded value.
 - **Regex `g` and `y` flags stay stripped.** They break match-position
   bookkeeping in the snippet logic and have caused real bugs.
 - **`maxResults` is bounded to `[1, 1000]`.** The schema enforces the

@@ -1,15 +1,3 @@
-/*
-Copyright 2026 Adobe. All rights reserved.
-This file is licensed to you under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License. You may obtain a copy
-of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under
-the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
-OF ANY KIND, either express or implied. See the License for the specific language
-governing permissions and limitations under the License.
-*/
-
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 
@@ -21,6 +9,7 @@ import {
   parseDateOrThrow,
   parseFindSessionsArgs,
   parseSessionFileTimestamp,
+  renderExpandableSessionResult,
   validateMaxResults,
 } from "../index.ts";
 
@@ -213,6 +202,79 @@ describe("extractText / extractToolCallText", () => {
   it("returns empty string for non-array inputs", () => {
     assert.equal(extractToolCallText("string"), "");
     assert.equal(extractToolCallText(undefined), "");
+  });
+});
+
+describe("renderExpandableSessionResult", () => {
+  const theme = { fg: (_name: string, text: string) => text };
+  const result = {
+    content: [
+      {
+        type: "text" as const,
+        text: Array.from(
+          { length: 12 },
+          (_, index) => `line ${index + 1}`,
+        ).join("\n"),
+      },
+    ],
+  };
+
+  it("shows a bounded preview until expanded", () => {
+    const collapsed = renderExpandableSessionResult(
+      result,
+      { expanded: false, isPartial: false },
+      theme,
+      { isError: false },
+    )
+      .render(80)
+      .map((line) => line.trimEnd());
+    const expanded = renderExpandableSessionResult(
+      result,
+      { expanded: true, isPartial: false },
+      theme,
+      { isError: false },
+    )
+      .render(80)
+      .map((line) => line.trimEnd());
+
+    assert.equal(collapsed.includes("line 9"), false);
+    assert.equal(
+      collapsed.some((line) => line.includes("to expand")),
+      true,
+    );
+    assert.equal(expanded.includes("line 12"), true);
+    assert.equal(
+      expanded.some((line) => line.includes("to expand")),
+      false,
+    );
+  });
+
+  it("removes terminal control sequences from transcript output", () => {
+    const lines = renderExpandableSessionResult(
+      {
+        content: [{ type: "text", text: "safe\u001b[31m red\u001b[0m\u0000" }],
+      },
+      { expanded: true, isPartial: false },
+      theme,
+      { isError: false },
+    )
+      .render(80)
+      .map((line) => line.trimEnd());
+
+    assert.deepEqual(lines, ["safe red"]);
+  });
+
+  it("shows complete errors without requiring expansion", () => {
+    const lines = renderExpandableSessionResult(
+      result,
+      { expanded: false, isPartial: false },
+      theme,
+      { isError: true },
+    )
+      .render(80)
+      .map((line) => line.trimEnd());
+
+    assert.equal(lines.includes("line 12"), true);
   });
 });
 

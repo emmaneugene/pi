@@ -1,51 +1,23 @@
 ---
 name: why
 description: "Use for 'why does X work this way', 'why we picked Y', design rationale, regressions, postmortems, or data-backed thresholds. Discovers available MCPs and queries each evidence category (source control, issue tracker, long-form docs, real-time chat, infrastructure observability, error tracking, product analytics warehouse) in parallel, then returns a cited read on decisions and tradeoffs. Use how for runtime behavior, blast-radius for what a change breaks elsewhere."
-disable-model-invocation: false
 source: https://github.com/cursor/plugins/tree/main/pstack/skills/why
 ---
 
 # Why
 
-Investigate the motivation and intent behind code. Why was it built this way? What edge cases were considered? What product, business, or operational constraints shaped the design? What alternatives were rejected, and why?
+Investigate the motivation and constraints behind code. Use `how` for runtime behavior; use `why` for historical rationale, rejected alternatives, and the forces that shaped a decision.
 
-Companion to the `how` skill. `how` answers what the code does and how it works. `why` answers what forces led to its shape.
+## Operating contract
 
-## How this skill works
+- Anchor the question in concrete files, symbols, commits, and pull requests before dispatching investigators.
+- Search every available evidence category in parallel. A null result is evidence; an unsearched source is a gap.
+- Separate cited facts from supported inference, speculation, and unknowns.
+- Cite every claim about intent and surface conflicting sources instead of choosing the tidier story.
+- Report unavailable sources and empty searches explicitly.
+- Never infer motivation from code shape alone.
 
-Historical context spreads across seven evidence categories: source control history, issue or ticket tracking, long-form documents, real-time team chat, infrastructure observability, error or exception tracking, and product analytics warehouses. You cannot predict from the question alone which one holds the answer, so the skill enumerates available MCPs at run time, maps each to a category, queries all seven in parallel, then synthesizes with explicit confidence calibration. Null results from searched categories are first-class evidence about how the decision was made; report them alongside positive findings. The default is coverage, not minimalism.
-
-## Operating Posture
-
-Operate as a careful, cautious, precise investigator. Think like a detective piecing together a historical case from fragmentary records. When the record is thin, say so.
-
-Concretely:
-
-- **Evidence before narrative.** Collect the pieces first, then see what story they support. Never pick a story and recruit the evidence that fits it.
-- **Precision over polish.** Prefer the exact quote and citation over a smooth paraphrase. A reader should be able to follow any claim back to its source and verify it in under a minute.
-- **Consider what you haven't seen.** The evidence you find is a sample, not the whole truth. Before concluding, ask what you would expect to see if an alternative explanation were true, and whether you looked for it.
-- **Name the gaps.** If a thread goes cold, a source isn't searchable, or a question has no answer, document the gap. Don't paper it over with an authoritative-sounding guess.
-- **Hedge on purpose.** When evidence is indirect, your language should signal it ("appears to", "likely", "suggests"). Confidence-matching phrasing is a feature of the output, not a stylistic choice the synthesizer may override.
-- **No shortcut by code-reading.** The code tells you what it does, rarely why it exists. Resist inferring intent from code shape.
-
-This posture is the working method, not a disclaimer.
-
-## Core Epistemics
-
-This skill builds a **patchwork understanding** from fragmented historical evidence. Tickets go stale. Chat threads get deleted. Commit messages lie. People change their minds between the PR description and the implementation. The original author may have left the company.
-
-Be ruthlessly honest about what you know versus what you're inferring. The goal is not a satisfying story; it is to surface evidence, calibrate confidence, and let the user decide.
-
-Principles:
-
-- **Cite everything.** Every claim about intent should reference a specific commit hash, PR number, ticket ID, doc URL, chat permalink, or code comment. If you can't cite it, it's inference, not fact, and must be labeled as such.
-- **Prefer "appears to" over "because".** Hedge when evidence is indirect. Reserve confident language for direct, explicit evidence.
-- **Surface contradictions.** If two sources disagree, show both. Don't quietly pick the one that fits your narrative.
-- **Acknowledge gaps.** If a question has no answer in any source you searched, say so. An honest "we couldn't find out why" beats a confident guess.
-- **Multiple hypotheses are valid.** When the evidence fits several stories, present them all with the evidence for each. Let the user triangulate.
-- **Beware rationalization.** Code that makes sense today may have been written for reasons that no longer apply, or for no good reason at all. Don't retrofit intent.
-
-Read `references/epistemics.md` for the full confidence framework and phrasing guide. The synthesizer must follow it.
+`references/epistemics.md` defines confidence levels and permitted phrasing. Investigator and synthesizer prompts apply that framework directly.
 
 ## Step 1. Understand the Target and the Question
 
@@ -132,25 +104,21 @@ Each investigator gets:
 4. The code anchor from Step 2 (file paths, symbols, commit hashes, PR numbers, ticket IDs)
 5. The user's original question
 
-### Investigator roster. One per available evidence category
+### Investigator roster
 
-Spawn one investigator per category that has a matching MCP. Each owns exactly one tool or MCP.
+Use one investigator per available category. Give it the matching source guide rather than reproducing that guide in the dispatch.
 
-Each entry lists what the category physically contains and the kind of "why" it uniquely surfaces. Use it to know what to expect back, how to name a gap when a category returns empty, and (only in the rare provably-irrelevant case) to justify a skip. Every category overlaps, but each owns a kind of evidence the others cannot recover.
+| Category            | Typical sources                              | Guide                                                |
+| ------------------- | -------------------------------------------- | ---------------------------------------------------- |
+| Source control      | Git, GitHub pull requests, comments, tests   | `references/sources/code-archaeology.md`             |
+| Issue tracker       | Jira, Linear, GitHub Issues                  | matching tracker guide                               |
+| Long-form documents | Confluence, Notion, design docs, ADRs        | matching document guide                              |
+| Team chat           | Slack, Teams, Discord                        | `references/sources/slack.md` or matching guide      |
+| Infrastructure      | Datadog, Grafana, New Relic, logs and traces | `references/sources/datadog.md` or matching guide    |
+| Error tracking      | Sentry, Rollbar, Bugsnag                     | `references/sources/sentry.md` or matching guide     |
+| Product analytics   | Databricks, Snowflake, BigQuery, dbt         | `references/sources/databricks.md` or matching guide |
 
-1. **Source control investigator**. Git history, `gh` for PRs, code comments, tests. Always spawn; the only guaranteed source. Best at surfacing _implementation-time rationale captured during review_. PR descriptions stating the problem, review threads debating alternatives, inline comments encoding non-obvious constraints, test names that encode motivating edge cases, and commit messages linking tickets or incidents. Most trustworthy because it ties directly to the diff that shipped.
-
-2. **Issue / ticket tracker investigator** (e.g. Linear, Jira, GitHub Issues, Plane, Shortcut MCP). Tickets, project docs, status updates, spec attachments. Best at surfacing _the product or business forcing function_. Customer requests ("Acme needs X for their SOC2 audit"), compliance deadlines, parent-initiative framing ("Q3 enterprise readiness"), ticket-level scope changes, and labels that categorize the motivation (`customer:*`, `incident-followup`, `compliance`, `perf-regression`). Strongest when the why is external to engineering.
-
-3. **Long-form documents investigator** (e.g. Notion, Confluence, Google Docs, Coda MCP). PRDs, specs, RFCs, design docs, ADRs, postmortems, team pages, meeting notes. Best at surfacing _long-form design rationale_. Problem statements, explicit "alternatives considered" and "rejected approaches" sections, strategy documents that set priorities, ADRs with finalized decisions, and postmortem action items that tie directly to code. Where the why is written out before it becomes code.
-
-4. **Real-time team chat investigator** (e.g. Slack, Discord, Microsoft Teams, Mattermost MCP). Feature-name and symbol searches, PR URL mentions, incident channels (`#sev-*`, `#incident-*`), author-handle activity around the ship date. Best at surfacing _real-time deliberation that never reached a doc_. Fire-drill decisions during incidents, Q&A between the PR author and reviewers, casual "we decided X because Y" threads, and rationale for small changes that didn't warrant a PRD. Especially important when the source control, ticket, and doc paper trail is thin.
-
-5. **Infrastructure observability investigator** (e.g. Datadog, New Relic, Honeycomb, Grafana, Splunk MCP). Metrics, monitors, dashboards, logs, APM traces, formal incidents. Infra/runtime view. Best at surfacing _infrastructure and runtime reality that motivated the code_. Monitor thresholds whose numbers match code constants, metric spikes in the window right before a PR merge, dashboards created as postmortem action items, incident timelines that reference the target. Strongest when the target reacts to an infra signal (timeouts, retries, rate limits, circuit breakers).
-
-6. **Error / exception tracking investigator** (e.g. Sentry, Rollbar, Bugsnag, Airbrake MCP). Issues, events, stack traces, releases. Best at surfacing _the specific exceptions and error trajectories that motivated defensive or corrective code_. Stack traces that pass through the target function, issues whose first-seen/last-seen windows bracket the PR ship date, release correlations that show an error stopping at a specific version. Strongest for catch blocks, null guards, type checks, retries, and other defenses.
-
-7. **Product analytics warehouse investigator** (e.g. Databricks, Snowflake, BigQuery, ClickHouse, dbt, Redshift MCP). Product-analytics events, experiment and feature-flag exposure tables, usage and billing events, query history, warehouse telemetry. Product/data view. Complements infrastructure observability by covering _user behavior and data reality_ around the ship date rather than infra metrics. Best at surfacing _product and data reality that shaped the code_. Feature-usage trajectories (a step-function ramp from zero is strong evidence that this PR launched it), experiment/flag exposure data tied to ship decisions, pre-ship distributions that reveal where a threshold constant came from (e.g., `limit = 128 * 1024` matching the p99 of an upload-size column), and data-pipeline scale evidence for migrations/backfills. Strongest for flag-gated code, experiment-driven ships, data migrations, and "where did this number come from" questions.
+Always run the source-control investigator. The category guide defines what to search, what evidence that source can provide, and how to report a null result.
 
 ### When to skip an investigator
 
@@ -184,47 +152,27 @@ Its job is the final output: a confidence-weighted, evidence-cited narrative wit
 
 Take the synthesizer's output and present it to the user. You may lightly edit for clarity or add context from the conversation, but **do not rewrite the confidence language**. The epistemic framing is the product. Dropping the hedges to sound more authoritative is the exact failure mode this skill exists to prevent.
 
-## Output Format
+## Output format
 
-The final output uses this structure. Adapt as needed, but keep the confidence separation intact.
+The synthesizer owns the detailed report schema in `references/synthesizer-prompt.md`. Preserve these sections when presenting its result:
 
-**The Question**. Restate what the user asked, concisely.
+1. **The question** and **the code in question**.
+2. **What we found** with direct citations.
+3. **What we can reasonably infer**, with the inference chain and calibrated language.
+4. **Competing hypotheses** when the record supports more than one explanation.
+5. **What we do not know**, including empty searches and unavailable sources.
+6. **Sources consulted**, one line per category.
+7. **Confidence summary**.
 
-**The Code in Question**. File paths, line ranges, and key symbols. One or two lines so the reader is anchored.
+If the user plans to change the code, finish with Preserve / Change / Avoid / Risk constraints derived from the evidence. Do not rewrite the synthesizer's confidence language.
 
-**What We Found (direct evidence)**. Claims with explicit citations (PR #, ticket ID, doc URL, chat permalink, commit hash, code comment with file:line). Each bullet is a thing we have textual evidence for. Use present tense and quote or paraphrase the source.
+## Orchestration failures to avoid
 
-**What We Can Reasonably Infer**. Claims well-supported by indirect evidence or combinations of signals, but not explicitly stated anywhere. Each bullet must explain the inference chain: "Given A and B, it's likely that C." Use hedged language ("appears to", "likely", "suggests").
-
-**Competing Hypotheses**. If the evidence fits multiple stories, list them. For each, give the hypothesis, the evidence for it, and the evidence against it. Don't force a winner when the record doesn't support one. (Skip this section if there's a clear answer.)
-
-**What We Don't Know**. Explicit gaps. Questions the user asked that the evidence didn't answer. Sources we searched and came up empty. Be specific. "We searched the issue tracker for 'rate limit' and found no ticket discussing this specific threshold" is more useful than "we don't know why."
-
-**Sources Consulted**. One line per investigator, including the ones that returned nothing. The reader should see at a glance (a) which MCPs were queried, (b) which came back empty, and (c) which were skipped and why. This coverage map lets the user judge breadth and redirect if something obvious was missed.
-
-Format each line as: `- <Source>: <what was searched>. <what was found, or "no relevant results," or "skipped. reason">.`
-
-Example:
-
-- Source control (git/gh): `git log --follow backend/retry.ts`, PRs #49074, #47812. Found PR #49074 introduced exponential backoff and linked ENG-4421.
-- Issue tracker (Linear): searched for "retry" and ENG-4421. Found ENG-4421 parent issue but no discussion of backoff parameters.
-- Long-form docs (Notion): searched for "retry policy," "backend retries," "ENG-4421." No relevant results.
-- Real-time team chat (Slack): skipped. No matching MCP available in this environment. Gap: conversational record not searched.
-- Infrastructure observability (Datadog): searched for `retry_count` metric and monitors around 2024-08-14. Found monitor "Upstream 5xx rate > 1%" created same day as PR #49074.
-- Error / exception tracking (Sentry): searched for issues first-seen in Aug 2024 with stack through `retry.ts`. Found issue SENTRY-3821 spiking in the week before the PR.
-- Product analytics warehouse (Databricks): queried `<your_analytics_db>.<schema>.stg_backend_upstream_retry` for the 30-day window around 2024-08-14. Daily failure-classified event count fell from ~1.2k/day pre-PR to <50/day post-PR. Also checked `system.query.history` for relevant migration queries. None found.
-
-After the Sources Consulted block, if the user's `why` question is a precursor to actually changing this code, convert the lineage findings into a Preserve / Change / Avoid / Risk constraint set suitable for planning the change.
-
-## Common Failure Modes to Avoid
-
-- **Confident storytelling**. A plausible narrative built from thin evidence. A bullet with no citation goes in "inferred" or "hypotheses," not "what we found."
-- **Citing the code as evidence for its own intent**. "Handles the null case because it checks for null" is mechanics, not motivation. Motivation comes from an external source (PR discussion, ticket, comment, conversation) or is labeled as inference.
-- **Recency bias**. Assuming the most recent commit is authoritative. The current shape is often the accretion of many earlier decisions. Trace back.
-- **Sycophantic agreement**. If the user suggests a reason ("I assume this is for performance?"), treat it as a hypothesis and check the evidence independently, don't just confirm it.
-- **Skipping the gaps section**. An honest accounting of what you couldn't find out is part of the value.
-- **Skipping investigators by anticipation**. Deciding up front that "long-form docs probably don't have this" or "this isn't an error tracking thing" without searching. The default-to-all-seven posture prevents this. A null result is a data point; a skipped search is a blind spot.
-- **Collapsing investigators into one agent**. Each MCP has its own query vocabulary, result shape, and pitfalls; pooling them dilutes specialization and makes coverage harder to reason about. Always one investigator per category.
+- Skipping an available category because it seems unlikely to help.
+- Combining multiple evidence categories in one investigator.
+- Dispatching investigators without the code anchor and original question.
+- Omitting null results or unavailable sources from synthesis.
+- Rewriting the synthesizer's confidence language to sound more decisive.
 
 ## Reference Files
 

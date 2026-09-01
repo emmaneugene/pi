@@ -105,8 +105,13 @@ Environment variables:
 
 - `PI_SESSION_SEARCH_ROOT` — override the sessions directory (default:
   the `sessions` directory under your pi agent config directory).
-- `PI_SESSION_SEARCH_MAX_BYTES` — per-file size cap to keep search snappy
-  (default 5 MB; oversized files are reported as `skippedFiles`).
+- `PI_SESSION_SEARCH_MAX_BYTES` — per-file search cap and per-call
+  `read_session` output cap (default 5 MB). Search reports oversized source
+  files as `skippedFiles`. `read_session` streams large source files and
+  truncates an oversized returned window with an explicit notice.
+- `PI_SESSION_SEARCH_MAX_LINE_BYTES` — maximum size of one JSONL record that
+  `read_session` will parse (default 16 MB). This bounds memory when one message
+  contains a very large inline tool result.
 
 ## How it works
 
@@ -115,10 +120,13 @@ pi stores every session as a JSONL file under the configured sessions directory:
 JSON object — the first is a `session` header (with `id` and `cwd`), the rest
 are `message` entries (and a few other types).
 
-`search_sessions` walks that directory, streams each JSONL file, parses
-`message` entries, extracts text content (skipping images and, by default, raw
-tool args), and matches against your query. `read_session` parses one file and
-emits a Markdown-formatted window centered on a target timestamp.
+`search_sessions` walks that directory, reads each size-capped JSONL file,
+parses `message` entries, extracts text content (skipping images and, by
+default, raw tool args), and matches against your query. `read_session` scans
+one file incrementally and emits a bounded Markdown window centered on a
+target timestamp. It scans the source once to locate and count messages, then
+again to read the selected window. It does not load the complete transcript
+into memory, but each call performs work proportional to the source file size.
 
 No model is called. No external network. No session is mutated.
 
@@ -141,10 +149,10 @@ exfiltration primitive if the active LLM is operating on untrusted input.
 
 - **Read-only.** No tool here writes, deletes, or transmits anything.
 - **Path containment in `read_session`.** Resolves symlinks on both the file
-  and the configured root, rejects any path that doesn't end up under the
-  resolved root, and stat-caps the file size at
-  `PI_SESSION_SEARCH_MAX_BYTES` (default 5 MB) so a pathological session
-  file can't OOM the pi process.
+  and the configured root and rejects any path that doesn't end up under the
+  resolved root. It scans JSONL incrementally, rejects individual records over
+  `PI_SESSION_SEARCH_MAX_LINE_BYTES`, and caps returned output at
+  `PI_SESSION_SEARCH_MAX_BYTES`.
 - **Path containment in `search_sessions`.** Per-subdirectory and per-file
   symlink containment: a `.jsonl` symlinked outside the root is detected at
   `realpath` time and skipped (counted as `skippedFiles` in the result).

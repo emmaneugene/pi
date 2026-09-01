@@ -1,40 +1,49 @@
 {
-  "lastChangelogVersion": "0.81.1",
-  "defaultProvider": "cursor",
-  "defaultModel": "composer-2.5",
+  "lastChangelogVersion": "0.84.4",
+  "defaultProvider": "opencode-go",
+  "defaultModel": "glm-5.3-flash",
   "hideThinkingBlock": false,
-  "defaultThinkingLevel": "medium",
+  "defaultThinkingLevel": "high",
   "enabledModels": [
     "anthropic/claude-fable-5",
+    "anthropic/claude-opus-5",
     "anthropic/claude-opus-4-8",
     "anthropic/claude-sonnet-5",
-    "anthropic/claude-haiku-4-5",
     "openai-codex/gpt-5.6-sol",
     "openai-codex/gpt-5.6-terra",
     "openai-codex/gpt-5.6-luna",
-    "openrouter/z-ai/glm-5.2",
-    "openrouter/moonshotai/kimi-k2.6",
-    "openrouter/moonshotai/kimi-k2.7-code",
-    "openrouter/deepseek/deepseek-v4-flash",
-    "openrouter/deepseek/deepseek-v4-pro",
+    "cursor/auto",
+    "cursor/fable-5@1m",
+    "cursor/grok-4.6",
     "cursor/grok-4.5",
-    "cursor/composer-2-5"
+    "cursor/composer-2-5",
+    "opencode-go/glm-5.3",
+    "opencode-go/glm-5.3-flash",
+    "opencode-go/qwen3.8-flash",
+    "opencode-go/grok-4.6",
+    "opencode-go/deepseek-v4-pro",
+    "opencode-go/deepseek-v4-flash",
+    "opencode-go/deepseek-v4-flash-vision-exp",
+    "opencode-go/kimi-k2.7-code",
+    "opencode-go/kimi-k3"
   ],
   "skills": ["~/.agents/skills"],
   "shellPath": "/bin/zsh",
   "packages": [
-    "npm:pi-mcp-adapter",
-    "npm:@marckrenn/pi-sub-bar",
-    "npm:@plannotator/pi-extension@0.22.0",
+    "npm:@ff-labs/pi-fff",
     "npm:@gotgenes/pi-anthropic-auth",
-    "npm:pi-web-providers",
-    "npm:pi-cursor-sdk"
+    "npm:@marckrenn/pi-sub-bar",
+    "npm:@plannotator/pi-extension",
+    "npm:pi-cursor-sdk",
+    "npm:pi-mcp-adapter",
+    "npm:pi-web-providers"
   ],
   "doubleEscapeAction": "tree",
+  "externalEditor": "zed --wait",
   "treeFilterMode": "no-tools",
   "theme": "light/dark",
   "transport": "auto",
-  "enableSkillCommands": true,
+  "enableSkillCommands": false,
   "collapseChangelog": true,
   "enableInstallTelemetry": true,
   "defaultProjectTrust": "always",
@@ -47,5 +56,11 @@
   "warnings": {
     "anthropicExtraUsage": false
   },
-  "outputPad": 1
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 16384
+  },
+  "outputPad": 1,
+  "tuiMode": "fullscreen",
+  "fullscreenScrollbar": "always"
 }

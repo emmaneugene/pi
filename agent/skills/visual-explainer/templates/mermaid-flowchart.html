@@ -15,7 +15,9 @@
   - Large heading (38px) for typographic contrast
   - ESM import of Mermaid + @mermaid-js/layout-elk
   - Mermaid theme: 'base' + full themeVariables, fontSize: 16px
-  - CSS overrides: .nodeLabel 16px, .edgeLabel 13px
+  - No post-render font overrides on Mermaid labels (boxes are sized at
+    measure time; changing font-family/size afterwards clips text) and
+    render waits for document.fonts.ready so measurement uses the webfont
   - look: 'classic' for clean lines
   - layout: 'elk' for better node positioning
   - Zoom controls with scroll-to-zoom and drag-to-pan
@@ -226,15 +228,10 @@
       }
 
       /* ============ MERMAID SVG OVERRIDES ============ */
-      .mermaid .nodeLabel {
-        font-family: var(--font-body) !important;
-        font-size: 16px !important;
-      }
-
-      .mermaid .edgeLabel {
-        font-family: var(--font-mono) !important;
-        font-size: 13px !important;
-      }
+      /* Never override font-family/font-size of .nodeLabel/.edgeLabel here:
+         Mermaid sizes label boxes at measure time, so post-render font changes
+         clip text. Want different label sizing? Set themeVariables.fontSize.
+         Color/background overrides are safe (they don't affect metrics). */
 
       .mermaid .node rect,
       .mermaid .node circle,
@@ -816,6 +813,9 @@
         render();
       }
 
+      // Fonts must be loaded before Mermaid measures labels, or boxes are
+      // sized for the fallback font and the webfont overflows them.
+      await document.fonts.ready;
       document.querySelectorAll(".diagram-shell").forEach(initDiagram);
     </script>
   </body>

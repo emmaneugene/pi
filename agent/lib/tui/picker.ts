@@ -1,18 +1,20 @@
 /**
  * Reusable, resume-style catalog browser.
  *
- * A filterable picker (search box + fuzzy filter + windowed scroll + columns)
- * built on pi-tui's `SelectList`, wrapped in `ctx.ui.custom()` inside a solid
- * black-backed bordered box so it stands out from the chat behind it. Because
- * it is an ephemeral overlay, nothing is written to the session — catalogs
- * never leak into the exported history.
+ * A filterable picker: a search box, a fuzzy filter, a windowed scroll, and
+ * columns. It builds on pi-tui's `SelectList` and wraps it in
+ * `ctx.ui.custom()` inside a solid black-backed bordered box, so it stands
+ * out from the chat behind it.
  *
- * Selecting a row opens that entry's full artefact in the editor unless the
- * caller supplies a custom selection action. With a custom action, the
+ * This picker is an ephemeral overlay, so it writes nothing to the session.
+ * Catalogs never leak into the exported history.
+ *
+ * Selecting a row opens that entry's full artefact in the editor, unless the
+ * caller supplies a custom selection action. Even with a custom action, the
  * configured external-editor key still opens the artefact:
- *   - $EDITOR / $VISUAL set → open directly in the external editor (a real file
- *     path when the artefact is a file, otherwise a temp file).
- *   - neither set → fall back to pi's builtin editor (`ctx.ui.editor`).
+ *   - $EDITOR / $VISUAL set → open directly in the external editor (a real
+ *     file path when the artefact is a file, otherwise a temp file).
+ *   - neither set → fall back to pi's built-in editor (`ctx.ui.editor`).
  */
 
 import { spawn } from "node:child_process";
@@ -20,7 +22,7 @@ import { unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  type ExtensionCommandContext,
+  type ExtensionContext,
   getSelectListTheme,
   keyHint,
 } from "@earendil-works/pi-coding-agent";
@@ -33,6 +35,7 @@ import {
   type TUI,
   visibleWidth,
 } from "@earendil-works/pi-tui";
+import { modalPriority } from "./modal-priority.ts";
 
 export interface CatalogArtifact {
   /** Full artefact text. Used by the builtin editor, and for the external
@@ -66,8 +69,8 @@ export interface CatalogOptions {
   onSelect?: (entry: CatalogEntry) => Promise<void> | void;
   /**
    * Optional ctrl+x action on the highlighted entry (e.g. stop a running
-   * subagent). When set, a `ctrl+x stop` hint is shown and, after the action,
-   * the list is refreshed in place so statuses update.
+   * subagent). When set, this shows a `ctrl+x stop` hint. After the action
+   * runs, the list refreshes in place so statuses update.
    */
   onKill?: (value: string) => Promise<KillResult | void> | KillResult | void;
 }
@@ -131,7 +134,7 @@ function boxed(content: string[], width: number, theme: any): string[] {
  * `undefined` if cancelled.
  */
 async function pickFromList(
-  ctx: ExtensionCommandContext,
+  ctx: ExtensionContext,
   title: string,
   getEntries: () => CatalogEntry[],
   opts: CatalogOptions,
@@ -269,7 +272,7 @@ async function pickFromList(
 
 /** Launch the external editor on `file`, suspending the TUI while it runs. */
 function runExternalEditor(
-  ctx: ExtensionCommandContext,
+  ctx: ExtensionContext,
   editorCmd: string,
   file: string,
 ): Promise<void> {
@@ -303,7 +306,7 @@ function runExternalEditor(
 
 /** Open an artefact: external $EDITOR if available, else the builtin editor. */
 async function openArtifact(
-  ctx: ExtensionCommandContext,
+  ctx: ExtensionContext,
   title: string,
   art: CatalogArtifact,
 ): Promise<void> {
@@ -325,9 +328,7 @@ async function openArtifact(
     if (temp) {
       try {
         unlinkSync(temp);
-      } catch {
-        // ignore cleanup errors
-      }
+      } catch {}
     }
   }
 }
@@ -337,7 +338,7 @@ async function openArtifact(
  * editor → returns to the list. Loops until dismissed. TUI-only.
  */
 export async function showCatalog(
-  ctx: ExtensionCommandContext,
+  ctx: ExtensionContext,
   title: string,
   entriesArg: CatalogEntry[] | (() => CatalogEntry[]),
   opts: CatalogOptions = {},
@@ -355,19 +356,21 @@ export async function showCatalog(
     return;
   }
 
-  for (;;) {
-    const choice = await pickFromList(ctx, title, getEntries, opts);
-    if (!choice) return;
-    const entry = getEntries().find((e) => e.item.value === choice.value);
-    if (!entry) continue;
-    if (choice.action === "select" && opts.onSelect) {
-      await opts.onSelect(entry);
-    } else {
-      await openArtifact(
-        ctx,
-        `${title} · ${entry.item.label}`,
-        entry.artifact(),
-      );
+  await modalPriority.run(async () => {
+    for (;;) {
+      const choice = await pickFromList(ctx, title, getEntries, opts);
+      if (!choice) return;
+      const entry = getEntries().find((e) => e.item.value === choice.value);
+      if (!entry) continue;
+      if (choice.action === "select" && opts.onSelect) {
+        await opts.onSelect(entry);
+      } else {
+        await openArtifact(
+          ctx,
+          `${title} · ${entry.item.label}`,
+          entry.artifact(),
+        );
+      }
     }
-  }
+  });
 }

@@ -11,13 +11,15 @@
  * Each file's basename (without .md) is the prompt's name, e.g.
  * `system-prompts/conversational.md` -> "conversational".
  *
- * How it works: your base ~/.pi/agent/SYSTEM.md (or .pi/SYSTEM.md) is still
- * loaded normally by pi and becomes `systemPromptOptions.customPrompt`. When
- * a prompt is active, this extension replaces that exact substring inside
- * the fully assembled system prompt with the selected file's contents, so
- * tool snippets, skills, and context files appended after it are untouched.
- * If there's no base custom prompt to replace (no SYSTEM.md at all), the
- * selected prompt is prepended instead.
+ * How it works: pi still loads your base ~/.pi/agent/SYSTEM.md (or
+ * .pi/SYSTEM.md) as before. This becomes `systemPromptOptions.customPrompt`.
+ * When you select a prompt, this extension replaces that exact substring in
+ * the assembled system prompt with the file's contents. Tool snippets,
+ * skills, and context files come after that substring, so they stay
+ * unchanged.
+ *
+ * If there is no base custom prompt to replace (no SYSTEM.md at all), this
+ * extension adds the selected prompt before the system prompt instead.
  *
  * The active prompt is a global sticky default, stored in
  * ~/.pi/agent/system-prompt.json. Picking one via `/system-prompt`

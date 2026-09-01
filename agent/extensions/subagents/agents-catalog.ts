@@ -17,7 +17,8 @@ import type { AgentConfig } from "./types.ts";
 
 const ALL_BUILTINS = new Set<string>(BUILTIN_TOOLS);
 
-function toolsLabel(allow: string[]): string {
+function toolsLabel(allow: string[] | undefined): string {
+  if (!allow) return "all tools";
   if (allow.length === 0) return "none";
   if (
     allow.length === ALL_BUILTINS.size &&

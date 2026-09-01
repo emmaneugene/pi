@@ -9,6 +9,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { notify } from "../../lib/desktop-notify.ts";
+import { shouldNotifyOnAgentEnd } from "../../lib/session-notification-policy.ts";
 
 const isTextPart = (part: unknown): part is { type: "text"; text: string } =>
   Boolean(
@@ -86,7 +87,9 @@ export const formatNotification = (
 };
 
 export default function (pi: ExtensionAPI) {
-  pi.on("agent_end", async (event) => {
+  pi.on("agent_end", async (event, ctx) => {
+    if (!shouldNotifyOnAgentEnd(ctx.sessionManager.getBranch())) return;
+
     const lastText = extractLastAssistantText(event.messages ?? []);
     const { title, body } = formatNotification(lastText);
     notify(title, body);

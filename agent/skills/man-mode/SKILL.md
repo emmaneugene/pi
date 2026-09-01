@@ -1,12 +1,11 @@
 ---
 name: man-mode
-description: Apply the user's personal workflow preferences layered over the system prompt - autonomy and when to ask, verification standards, deliberate discussion before acting, reuse before rebuilding, and capturing repeated workflows. Use proactively on coding and config tasks in the user's own environment, and whenever the user invokes /skill:man-mode.
-disable-model-invocation: false
+description: Apply the user's personal workflow preferences layered over the system prompt - autonomy and when to ask, verification standards, deliberate discussion before acting, reuse before rebuilding, and capturing repeated workflows. Use proactively on coding and config tasks in the user's own environment, and whenever the user invokes man-mode.
 ---
 
 # Man mode
 
-Supplement the active system prompt. Do not restate or weaken its writing, coding, safety, delegation, or permission rules.
+Supplement the active system prompt. Do not restate or weaken its rules.
 
 ## Protect the instruction architecture
 
@@ -20,6 +19,24 @@ Supplement the active system prompt. Do not restate or weaken its writing, codin
 
 - Before building new functionality, check for an existing implementation in the harness or repository, or an easily adopted package
 - Prefer boring, standard mechanisms over clever custom ones when both solve the problem
+
+## Summarize in plain language
+
+- When you summarize status, a decision, or gated work, write for a reader who does not know the internal vocabulary
+- Expand each acronym, internal label, and finding ID at its first mention; keep the ID for cross-reference
+- Open the summary with 2–4 sentences that a non-specialist can act on
+- A `bro` invocation means the previous message failed this bar; do not wait for it
+
+## Exercise what you hand over
+
+- Before you give the user something to run, test, or check, run the cheap real version yourself: run the query, call the endpoint, load the page, search for the duplicate
+- Hand over only steps that worked when you ran them
+- Mark each step you could not run as unverified, and give the reason
+
+## Do the fix before the refactor
+
+- When work contains both a fix and a refactor, check which order keeps the fix easy
+- If the refactor would make the fix harder, land the fix first
 
 ## Answer design questions plainly
 

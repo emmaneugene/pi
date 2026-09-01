@@ -10,6 +10,24 @@ import type { AgentSession } from "@earendil-works/pi-coding-agent";
 
 export type { ThinkingLevel };
 
+/**
+ * Thinking levels a spawn may request, ascending. `satisfies` keeps every entry
+ * a real `ThinkingLevel`; a level pi adds later is simply not offered until it
+ * is listed here. "off" is absent because a session's level cannot be off.
+ */
+export const THINKING_LEVELS = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const satisfies readonly ThinkingLevel[];
+
+export function isThinkingLevel(value: string): value is ThinkingLevel {
+  return (THINKING_LEVELS as readonly string[]).includes(value);
+}
+
 /** Agent type name, backed by a global or project agent markdown file. */
 export type SubagentType = string;
 
@@ -21,6 +39,19 @@ export type InvocationSettingSource =
 export interface InvocationSetting {
   value: string;
   source: InvocationSettingSource;
+}
+
+export function settingSourceLabel(setting: InvocationSetting): string {
+  switch (setting.source) {
+    case "tool override":
+      return "override";
+    case "agent definition":
+      return "definition";
+    case "inherited/default":
+      return "inherited";
+    default:
+      return "unknown";
+  }
 }
 
 /** Resolved execution metadata captured when a subagent is spawned. */
@@ -35,6 +66,15 @@ export interface SubagentInvocation {
 /** Custom child-session entry used to persist exact invocation metadata. */
 export const SUBAGENT_INVOCATION_ENTRY = "subagent-invocation";
 
+/** How a message reaches a running child. */
+export type SendMode = "steer" | "followUp";
+
+/** `queued` means the message has not reached the child's context. */
+export type SendResult =
+  | { kind: "delivered"; mode: SendMode }
+  | { kind: "queued" }
+  | { kind: "rejected"; reason: string };
+
 /** Agent run state. */
 export type SubagentStatus =
   | "queued"
@@ -45,16 +85,32 @@ export type SubagentStatus =
   | "stopped"
   | "error";
 
-/**
- * Resolved config for one agent type, loaded from agents/<name>.md.
- */
+const STATUS_ICONS: Record<string, string> = {
+  running: "●",
+  queued: "◌",
+  completed: "✓",
+  steered: "✓",
+  error: "✗",
+  aborted: "✗",
+  stopped: "■",
+  "on disk": "○",
+};
+
+export const statusIcon = (status: string): string =>
+  STATUS_ICONS[status] ?? "·";
+
+export const SUBAGENTS_DISABLED_MESSAGE =
+  "Subagents are disabled. Run /toggle-subagents to enable them.";
+
+/** Resolved config loaded from agents/<name>.md. */
 export interface AgentConfig {
   name: string;
   /** Absolute path to the agents/<name>.md definition file. */
   filePath: string;
   displayName?: string;
   description: string;
-  allowTools: string[];
+  /** Undefined allows all tools. An empty list allows none. */
+  allowTools?: string[];
   /** Fuzzy/explicit model, e.g. "anthropic/claude-haiku-4-5" or "haiku". */
   model?: string;
   thinking?: ThinkingLevel;
@@ -88,6 +144,12 @@ export interface AgentRecord {
   status: SubagentStatus;
   result?: string;
   error?: string;
+  /** Stop reason of the child's last assistant message, when it produced one. */
+  stopReason?: string;
+  /** Untrusted provider text. Never surface directly; see termination.ts. */
+  errorMessage?: string;
+  /** Reached its turn limit, whether or not the at-limit steer was sent. */
+  hitTurnLimit?: boolean;
   /** Completed model turns in this child session. */
   turns: number;
   toolUses: number;
@@ -96,14 +158,27 @@ export interface AgentRecord {
   session?: AgentSession;
   abortController?: AbortController;
   promise?: Promise<string>;
-  /** Steering messages that arrived before the session was ready. */
+  /** Messages that enter as steers before the initial prompt starts. */
   pendingSteers?: string[];
   lifetimeUsage: LifetimeUsage;
   /** Path to the persisted transcript JSONL, for audit. */
   transcriptFile?: string;
-  /** Set when the user stops the agent themselves (e.g. ctrl+x in /subagents),
-   *  so the completion follow-up says so instead of looking like a failure. */
+  /** The most recently started tool call that is still active. */
+  activeTool?: { name: string; detail?: string };
+  /**
+   * Resolves once the record's final state (status, result, stopReason) is
+   * written: finishAgent for a run settlement, directly for a queued record
+   * aborted or discarded without starting.
+   */
+  settled?: Promise<void>;
+  /** Whether the user has seen this failure. */
+  widgetAcknowledged?: boolean;
+  /** Whether the user stopped this agent. */
   userAborted?: boolean;
+  /**
+   * The blocking tool call delivered this record's result; do not notify.
+   */
+  awaitResult?: boolean;
 }
 
 /** Per-spawn options handed to the manager. */
@@ -114,7 +189,8 @@ export interface SpawnOptions {
   thinkingLevel?: ThinkingLevel;
   /** Prepend a compact recent excerpt from the parent conversation. */
   inheritContext?: boolean;
-  isBackground?: boolean;
+  /** Block the spawning tool call until the agent settles (the `wait` parameter). */
+  awaitResult?: boolean;
   /** Parent abort signal — aborts the child when the parent turn is interrupted. */
   signal?: AbortSignal;
 }

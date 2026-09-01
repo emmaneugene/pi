@@ -1,7 +1,6 @@
 ---
 name: web-app-builder
 description: Build interactive web apps as single-file HTML using React, Tailwind CSS, and shadcn/ui. Use when the user needs real interactivity - state management, routing, forms, data manipulation, component libraries. Not for static explanatory pages, diagrams, or reports (use visual-explainer for those).
-disable-model-invocation: false
 source: https://github.com/anthropics/skills/tree/main/skills/web-artifacts-builder
 ---
 

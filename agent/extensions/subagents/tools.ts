@@ -12,23 +12,28 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { resolveModel } from "./child-session.ts";
+import { renderExpandableToolResult } from "../../lib/expandable-tool-result.ts";
+import { inspectActivity } from "./activity.ts";
 import type { SubagentManager } from "./manager.ts";
+import { findModel, suggestModels } from "./models.ts";
 import type { AgentRegistry } from "./registry.ts";
-import type {
-  InvocationSetting,
-  SubagentInvocation,
-  SubagentType,
+import { resultOrReason } from "./termination.ts";
+import {
+  isThinkingLevel,
+  settingSourceLabel,
+  SUBAGENTS_DISABLED_MESSAGE,
+  THINKING_LEVELS,
+  type AgentRecord,
+  type SubagentInvocation,
+  type SubagentType,
 } from "./types.ts";
 
 export const SUBAGENT_TOOL_NAMES = [
   "subagent",
   "get_subagent_result",
+  "inspect_subagent",
   "steer_subagent",
 ] as const;
-
-const DISABLED_MESSAGE =
-  "Subagents are disabled. Run /toggle-subagents to enable them.";
 
 interface SubagentToolDetails {
   agentId?: string;
@@ -39,32 +44,17 @@ function textResult(text: string, details?: SubagentToolDetails) {
   return { content: [{ type: "text" as const, text }], details };
 }
 
-function sourceLabel(setting: InvocationSetting): string {
-  if (setting.source === "tool override") return "override";
-  if (setting.source === "agent definition") return "definition";
-  if (setting.source === "inherited/default") return "inherited";
-  return "unknown";
-}
-
 function invocationLine(invocation: SubagentInvocation): string {
-  return `${invocation.type} · ${invocation.model.value} (${sourceLabel(invocation.model)}) · ${invocation.thinking.value} (${sourceLabel(invocation.thinking)})`;
+  return `${invocation.type} · ${invocation.model.value} (${settingSourceLabel(invocation.model)}) · ${invocation.thinking.value} (${settingSourceLabel(invocation.thinking)})`;
 }
 
-/** Format a background-completion / status line for the orchestrator. */
-function describe(r: {
-  description: string;
-  status: string;
-  toolUses: number;
-  result?: string;
-  error?: string;
-  transcriptFile?: string;
-}): string {
+/** Format a completion or status line for the orchestrator. */
+function describe(r: AgentRecord): string {
   const head = `Agent "${r.description}" ${r.status} (${r.toolUses} tool uses).`;
   const transcript = r.transcriptFile
     ? `\n\nTranscript: ${r.transcriptFile}`
     : "";
-  if (r.error) return `${head}\nError: ${r.error}${transcript}`;
-  return `${head}\n\n${r.result ?? "No output."}${transcript}`;
+  return `${head}\n\n${resultOrReason(r)}${transcript}`;
 }
 
 export function registerTools(
@@ -83,10 +73,10 @@ export function registerTools(
       name: SUBAGENT_TOOL_NAMES[0],
       label: "Subagent",
       description:
-        `Launch a sub-agent for a multi-step task. Each runs in a fresh session with its own tool scope and system prompt. It has NOT seen this conversation, so the prompt must be self-contained.\n\n` +
+        `Launch a sub-agent for a multi-step task. Each runs asynchronously in a fresh session with its own tool scope and system prompt. It has NOT seen this conversation, so the prompt must be self-contained.\n\n` +
         `Available types: ${types()}. Custom agents live in ${CONFIG_DIR_NAME}/agents/<name>.md (project) or ${globalAgentsDir}/<name>.md (global).\n\n` +
         `- description: 3-5 words, shown in the UI.\n` +
-        `- run_in_background: returns an id immediately; you are notified on completion (never poll).\n` +
+        `- Returns an id immediately; you are notified on completion (never poll). Pass wait: true to block until the agent finishes and get its result inline — several wait spawns in one message run in parallel and their results return together.\n` +
         `- The result is not shown to the user — summarize it for them. Verify claimed code changes before reporting work done.`,
       parameters: Type.Object({
         prompt: Type.String({
@@ -101,8 +91,16 @@ export function registerTools(
         model: Type.Optional(
           Type.String({
             description:
-              'Model override ("provider/id" or fuzzy e.g. "haiku").',
+              'Model override: an exact "provider/id" (e.g. "anthropic/claude-sonnet-5") or a unique substring of a model id. An unknown id is rejected with the closest available ids. Never append an effort suffix such as ":xhigh" — set reasoning effort with `thinking`.',
           }),
+        ),
+        thinking: Type.Optional(
+          Type.Union(
+            THINKING_LEVELS.map((level) => Type.Literal(level)),
+            {
+              description: `Reasoning effort override, clamped to what the chosen model supports. One of: ${THINKING_LEVELS.join(", ")}. Overrides the agent definition's level.`,
+            },
+          ),
         ),
         max_turns: Type.Optional(
           Type.Number({
@@ -110,15 +108,16 @@ export function registerTools(
             minimum: 1,
           }),
         ),
-        run_in_background: Type.Optional(
-          Type.Boolean({
-            description: "Run in background; returns an id immediately.",
-          }),
-        ),
         inherit_context: Type.Optional(
           Type.Boolean({
             description:
               "Prepend a compact recent excerpt from the parent conversation (default false).",
+          }),
+        ),
+        wait: Type.Optional(
+          Type.Boolean({
+            description:
+              "Block until the agent finishes and return its result inline, instead of returning an id and notifying later. Launch several wait spawns in one message to run them in parallel and collect all results at once.",
           }),
         ),
       }),
@@ -129,7 +128,7 @@ export function registerTools(
         _onUpdate,
         ctx: ExtensionContext,
       ) => {
-        if (!isEnabled()) return textResult(DISABLED_MESSAGE);
+        if (!isEnabled()) return textResult(SUBAGENTS_DISABLED_MESSAGE);
         registry.reload(ctx.cwd);
         const type = params.subagent_type as SubagentType;
         if (!registry.isAvailable(type)) {
@@ -137,45 +136,58 @@ export function registerTools(
             `Unknown or disabled subagent type "${params.subagent_type}". Available types: ${types()}.`,
           );
         }
-        const model = params.model
-          ? resolveModel(params.model, ctx.modelRegistry, ctx.model)
-          : undefined;
-
-        if (params.run_in_background) {
-          const id = manager.spawn(pi, ctx, type, params.prompt, {
-            description: params.description,
-            model,
-            maxTurns: params.max_turns,
-            inheritContext: params.inherit_context,
-            isBackground: true,
-            signal: ctx.signal,
-          });
-          const invocation = manager.getRecord(id)!.invocation;
-          invocationsByCall.set(toolCallId, invocation);
+        // This function rejects a model reference that does not resolve. It
+        // does not silently replace that reference with the parent model,
+        // because the caller cannot correct a substitution it is never told
+        // about.
+        const model = findModel(params.model, ctx.modelRegistry);
+        if (params.model && !model) {
+          const suggestions = suggestModels(params.model, ctx.modelRegistry);
           return textResult(
-            `Launched background agent "${params.description}" (id: ${id}). You will be notified on completion.\n${invocationLine(invocation)}`,
-            { agentId: id, invocation },
+            `Unknown model "${params.model}". ${
+              suggestions.length > 0
+                ? `Closest available: ${suggestions.join(", ")}.`
+                : "No models are available in this session."
+            } Pass an exact provider/id; model ids carry no effort suffix, so set reasoning effort with the "thinking" parameter instead.`,
+          );
+        }
+        if (params.thinking && !isThinkingLevel(params.thinking)) {
+          return textResult(
+            `Unknown thinking level "${params.thinking}". One of: ${THINKING_LEVELS.join(", ")}.`,
           );
         }
 
-        const record = await manager.spawnAndWait(
-          pi,
-          ctx,
-          type,
-          params.prompt,
-          {
-            description: params.description,
-            model,
-            maxTurns: params.max_turns,
-            inheritContext: params.inherit_context,
-            signal: signal ?? ctx.signal,
-          },
-        );
-        invocationsByCall.set(toolCallId, record.invocation);
-        return textResult(
-          record.result?.trim() || record.error?.trim() || "No output.",
-          { agentId: record.id, invocation: record.invocation },
-        );
+        const id = manager.spawn(pi, ctx, type, params.prompt, {
+          description: params.description,
+          model,
+          thinkingLevel: params.thinking,
+          maxTurns: params.max_turns,
+          inheritContext: params.inherit_context,
+          awaitResult: params.wait,
+          signal: ctx.signal,
+        });
+        const invocation = manager.getRecord(id)!.invocation;
+        invocationsByCall.set(toolCallId, invocation);
+        if (!params.wait) {
+          return textResult(
+            `Launched agent "${params.description}" (id: ${id}). You will be notified on completion.\n${invocationLine(invocation)}`,
+            { agentId: id, invocation },
+          );
+        }
+        // ctx.signal already aborts the child on a parent interrupt; this
+        // listener covers the tool-call-level signal. Settling instead of
+        // rejecting keeps partial output plus its termination note as the result.
+        const onInterrupt = () => manager.abort(id);
+        signal?.addEventListener("abort", onInterrupt, { once: true });
+        const settled = await manager.whenSettled(id);
+        signal?.removeEventListener("abort", onInterrupt);
+        if (!settled) {
+          return textResult(
+            `Agent "${params.description}" (${id}) was discarded before it finished; the parent session switched away.`,
+            { agentId: id, invocation },
+          );
+        }
+        return textResult(describe(settled), { agentId: id, invocation });
       },
       renderCall(params, theme, context) {
         const invocation = invocationsByCall.get(context.toolCallId);
@@ -191,17 +203,19 @@ export function registerTools(
               : ("inherited/default" as const),
         };
         const thinking = invocation?.thinking ?? {
-          value: config?.thinking ?? pi.getThinkingLevel(),
-          source: config?.thinking
-            ? ("agent definition" as const)
-            : ("inherited/default" as const),
+          value: params.thinking ?? config?.thinking ?? pi.getThinkingLevel(),
+          source: params.thinking
+            ? ("tool override" as const)
+            : config?.thinking
+              ? ("agent definition" as const)
+              : ("inherited/default" as const),
         };
         const description = params.description || "subagent";
         const type = invocation?.type ?? params.subagent_type ?? "unknown";
         const text =
           theme.fg("toolTitle", theme.bold("subagent ")) +
           theme.fg("accent", description) +
-          `\n  ${theme.fg("muted", type)} ${theme.fg("dim", `· ${model.value} (${sourceLabel(model)}) · ${thinking.value} (${sourceLabel(thinking)})`)}`;
+          `\n  ${theme.fg("muted", type)} ${theme.fg("dim", `· ${model.value} (${settingSourceLabel(model)}) · ${thinking.value} (${settingSourceLabel(thinking)})`)}`;
         return new Text(text, 0, 0);
       },
       renderResult(result, _options, theme, context) {
@@ -225,12 +239,13 @@ export function registerTools(
     defineTool({
       name: SUBAGENT_TOOL_NAMES[1],
       label: "Get subagent result",
-      description: "Check the status/result of a background sub-agent by id.",
+      description:
+        "Check the status/result of an asynchronous sub-agent by id.",
       parameters: Type.Object({
         agent_id: Type.String({ description: "The agent id." }),
       }),
       execute: async (_id, params) => {
-        if (!isEnabled()) return textResult(DISABLED_MESSAGE);
+        if (!isEnabled()) return textResult(SUBAGENTS_DISABLED_MESSAGE);
         const r = manager.getRecord(params.agent_id);
         if (!r) return textResult(`No agent with id "${params.agent_id}".`);
         if (r.status === "running" || r.status === "queued") {
@@ -240,13 +255,77 @@ export function registerTools(
         }
         return textResult(describe(r));
       },
+      renderResult: renderExpandableToolResult,
+    }),
+  );
+
+  // ── inspect_subagent ────────────────────────────────────────────────────
+  pi.registerTool(
+    defineTool({
+      name: SUBAGENT_TOOL_NAMES[2],
+      label: "Inspect subagent",
+      description:
+        "Inspect a bounded snapshot of a sub-agent's recent activity when you need evidence to steer it. Do not use this to poll for completion; completion is delivered automatically.",
+      parameters: Type.Object({
+        agent_id: Type.String({ description: "The agent id." }),
+        since_cursor: Type.Optional(
+          Type.Integer({
+            description:
+              "Cursor from a prior inspection. Returns only newer settled activity when available.",
+            minimum: 0,
+          }),
+        ),
+        max_events: Type.Optional(
+          Type.Integer({
+            description:
+              "Maximum recent events to return (default 12, max 30).",
+            minimum: 1,
+            maximum: 30,
+          }),
+        ),
+      }),
+      execute: async (_id, params) => {
+        if (!isEnabled()) return textResult(SUBAGENTS_DISABLED_MESSAGE);
+        const record = manager.getRecord(params.agent_id);
+        if (!record) {
+          return textResult(`No agent with id "${params.agent_id}".`);
+        }
+
+        const snapshot = inspectActivity(
+          record.session,
+          params.since_cursor,
+          params.max_events,
+        );
+        const lines = [
+          `Agent "${record.description}" is ${record.status} (${record.turns} turns, ${record.toolUses} tool uses).`,
+          `Activity cursor: ${snapshot.cursor}.`,
+        ];
+        if (snapshot.cursorReset) {
+          lines.push(
+            "The supplied cursor was stale; showing a recent snapshot.",
+          );
+        }
+        if (snapshot.truncated) {
+          lines.push("Earlier activity was omitted by the event limit.");
+        }
+        if (snapshot.events.length > 0) {
+          lines.push("", ...snapshot.events);
+        } else {
+          lines.push("", "No settled activity since that cursor.");
+        }
+        if (snapshot.current) {
+          lines.push("", `in progress: ${snapshot.current}`);
+        }
+        return textResult(lines.join("\n"));
+      },
+      renderResult: renderExpandableToolResult,
     }),
   );
 
   // ── steer_subagent ──────────────────────────────────────────────────────
   pi.registerTool(
     defineTool({
-      name: SUBAGENT_TOOL_NAMES[2],
+      name: SUBAGENT_TOOL_NAMES[3],
       label: "Steer subagent",
       description:
         "Inject a steering message into a running sub-agent to redirect it mid-run.",
@@ -255,13 +334,22 @@ export function registerTools(
         message: Type.String({ description: "Message to inject." }),
       }),
       execute: async (_id, params) => {
-        if (!isEnabled()) return textResult(DISABLED_MESSAGE);
-        const ok = await manager.steer(params.agent_id, params.message);
-        return textResult(
-          ok
-            ? `Steered agent ${params.agent_id}.`
-            : `Could not steer ${params.agent_id} (not running?).`,
+        if (!isEnabled()) return textResult(SUBAGENTS_DISABLED_MESSAGE);
+        const result = await manager.send(
+          params.agent_id,
+          params.message,
+          "steer",
         );
+        switch (result.kind) {
+          case "delivered":
+            return textResult(`Steered agent ${params.agent_id}.`);
+          case "queued":
+            return textResult(
+              `Agent ${params.agent_id} has not started a turn yet. Your message is queued and reaches it when it does.`,
+            );
+          case "rejected":
+            return textResult(result.reason);
+        }
       },
     }),
   );

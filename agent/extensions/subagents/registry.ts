@@ -111,14 +111,18 @@ function posInt(v: unknown): number | undefined {
   return typeof v === "number" && v >= 0 ? v : undefined;
 }
 /**
- * `tools:` → explicit allowlist. Omitted/empty/"none" → no tools.
- * "*"/"all" → all built-ins. Extension tools must be named explicitly.
+ * `tools:` → explicit allowlist. Omitted, empty, "*" or "all" → undefined,
+ * meaning every tool. Only "none" grants nothing.
+ *
+ * An omitted field granting nothing was a footgun: a definition that forgot the
+ * field produced an agent that could only talk. The denylist in gating.ts is
+ * what actually holds a child back, not this list.
  */
-function parseTools(v: unknown): string[] {
-  if (v == null) return [];
+function parseTools(v: unknown): string[] | undefined {
+  if (v == null) return undefined;
   const s = String(v).trim();
-  if (!s || s === "none") return [];
-  if (s === "*" || s.toLowerCase() === "all") return [...BUILTIN_TOOLS];
+  if (!s || s === "*" || s.toLowerCase() === "all") return undefined;
+  if (s.toLowerCase() === "none") return [];
   return s
     .split(",")
     .map((t) => t.trim())

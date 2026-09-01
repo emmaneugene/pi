@@ -34,6 +34,8 @@ Do NOT use for dashboards — CSS Grid card layouts with Chart.js look better fo
 
 Without the ELK import and registration, `layout: 'elk'` silently falls back to dagre. Only import ELK when you actually need it — it adds significant bundle weight. Most simple diagrams render fine with dagre.
 
+ELK also **ignores per-subgraph `direction`** (e.g. `direction LR` inside a `subgraph` of a `graph TD`). If a diagram needs mixed flow directions, use dagre — it honors subgraph direction.
+
 ### Deep Theming
 
 Always use `theme: 'base'` — it's the only theme where all `themeVariables` are fully customizable. The built-in themes (`default`, `dark`, `forest`, `neutral`) ignore most variable overrides.
@@ -120,17 +122,13 @@ Mermaid renders SVG. Override its classes for pixel-perfect control that `themeV
   stroke-width: 1.5px;
 }
 
-/* Edge labels — smaller than node labels for visual hierarchy */
-.mermaid .edgeLabel {
-  font-family: var(--font-mono) !important;
-  font-size: 13px !important;
-}
-
-/* Node labels — 16px default; drop to 14px for complex diagrams (20+ nodes) */
-.mermaid .nodeLabel {
-  font-family: var(--font-body) !important;
-  font-size: 16px !important;
-}
+/* NEVER override font-family or font-size of .nodeLabel/.edgeLabel.
+   Mermaid sizes label boxes when it measures the text, so post-render font
+   changes make labels overflow and clip. Set label sizing/family up front via
+   themeVariables (fontFamily, fontSize) so measurement and rendering agree.
+   The color/background overrides above are safe — they don't affect metrics.
+   Same reason: render only after `await document.fonts.ready`, or Mermaid
+   measures with the fallback font and the loaded webfont clips. */
 
 /* Sequence diagram actors */
 .mermaid .actor {

@@ -1,22 +1,87 @@
-/**
- * Subagent extension composition root.
- *
- * Tools: subagent · get_subagent_result · steer_subagent
- * Tool access: explicit allowlist per agent type.
- * Wires the registry, manager, tools, slash commands, and completion notices.
- */
-
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import { showAgentsCatalog } from "./agents-catalog.ts";
 import { showSessionSubagents } from "./agents-menu.ts";
 import { loadState, saveState, STATE_FILE } from "./config.ts";
 import { SubagentManager } from "./manager.ts";
+import {
+  registerNotificationRenderer,
+  SUBAGENT_NOTIFICATION_TYPE,
+} from "./notification.ts";
 import { AgentRegistry } from "./registry.ts";
+import { resultOrReason } from "./termination.ts";
 import { registerTools, SUBAGENT_TOOL_NAMES } from "./tools.ts";
+import { type AgentRecord, SUBAGENTS_DISABLED_MESSAGE } from "./types.ts";
+import {
+  SubagentActivityWidget,
+  selectWidgetRecords,
+  type WidgetSelection,
+} from "./widget.ts";
 
-const MAX_CONCURRENT = 4;
-const DISABLED_MESSAGE =
-  "Subagents are disabled. Run /toggle-subagents to enable them.";
+const MAX_CONCURRENT = 8;
+const WIDGET_KEY = "onurpi-subagents-activity";
+const OPEN_SHORTCUT = "ctrl+shift+a";
+
+/** Installs the activity widget only while it has visible rows. */
+class ActivityDisplay {
+  private ctx: ExtensionContext | undefined;
+  private installed = false;
+
+  constructor(
+    private readonly getRecords: () => readonly AgentRecord[],
+    private enabled: boolean,
+  ) {}
+
+  setContext(ctx: ExtensionContext): void {
+    this.ctx = ctx;
+  }
+
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    if (enabled) this.sync();
+    else this.remove();
+  }
+
+  sync(): void {
+    if (!this.enabled) {
+      this.remove();
+      return;
+    }
+    const ctx = this.ctx;
+    if (ctx?.mode !== "tui") return;
+    const hasRows = this.select(Date.now()).shown.length > 0;
+    if (hasRows === this.installed) return;
+    if (!hasRows) {
+      this.remove();
+      return;
+    }
+    ctx.ui.setWidget(
+      WIDGET_KEY,
+      (tui, theme) =>
+        new SubagentActivityWidget(
+          tui,
+          theme,
+          (now) => this.select(now),
+          () => this.remove(),
+          `${OPEN_SHORTCUT} subagents`,
+        ),
+      { placement: "aboveEditor" },
+    );
+    this.installed = true;
+  }
+
+  remove(): void {
+    if (!this.installed) return;
+    this.installed = false;
+    this.ctx?.ui.setWidget(WIDGET_KEY, undefined);
+  }
+
+  private select(now: number): WidgetSelection {
+    return selectWidgetRecords(this.getRecords(), now);
+  }
+}
 
 function syncSubagentTools(pi: ExtensionAPI, enabled: boolean): void {
   try {
@@ -35,34 +100,42 @@ function syncSubagentTools(pi: ExtensionAPI, enabled: boolean): void {
 }
 
 export default function (pi: ExtensionAPI) {
+  registerNotificationRenderer(pi);
+
   const registry = new AgentRegistry(process.cwd());
   let enabled = loadState().enabled;
   const isEnabled = () => enabled;
 
-  const manager = new SubagentManager(
-    registry,
-    MAX_CONCURRENT,
-    // onComplete: notify the orchestrator when a BACKGROUND agent finishes.
-    (record) => {
+  const manager = new SubagentManager(registry, MAX_CONCURRENT);
+  const display = new ActivityDisplay(() => manager.listAgents(), enabled);
+  manager.setObservers({
+    onSpawn: () => display.sync(),
+    onComplete: (record) => {
+      if (record.awaitResult) {
+        // The result already reached the parent through the blocking tool call.
+        display.sync();
+        return;
+      }
       const isError =
         record.status === "error" ||
         record.status === "aborted" ||
         record.status === "stopped";
       const summary = record.userAborted
-        ? `Background agent "${record.description}" was aborted by the user. Do not relaunch it unless asked.`
+        ? `Agent "${record.description}" was aborted by the user. Do not relaunch it unless asked.`
         : isError
-          ? `Background agent "${record.description}" ${record.status}: ${record.error ?? "stopped"}.`
-          : `Background agent "${record.description}" completed (${record.toolUses} tool uses).\n\n${record.result ?? "No output."}\n\nUse get_subagent_result for full output.`;
+          ? `Agent "${record.description}" ${record.status}. ${resultOrReason(record)}`
+          : `Agent "${record.description}" completed (${record.toolUses} tool uses).\n\n${resultOrReason(record)}\n\nUse get_subagent_result for full output.`;
+      display.sync();
       pi.sendMessage(
         {
-          customType: "subagent-notification",
+          customType: SUBAGENT_NOTIFICATION_TYPE,
           content: summary,
           display: true,
         },
         { deliverAs: "followUp", triggerTurn: true },
       );
     },
-  );
+  });
 
   registerTools(pi, manager, registry, isEnabled);
   syncSubagentTools(pi, enabled);
@@ -73,7 +146,13 @@ export default function (pi: ExtensionAPI) {
       enabled = !enabled;
       saveState({ enabled });
       syncSubagentTools(pi, enabled);
-      if (!enabled) manager.abortAll();
+      display.setContext(ctx);
+      display.setEnabled(enabled);
+      if (!enabled) {
+        // Do not retain stopped rows that cannot be acknowledged while the
+        // extension is disabled. Their later promise settlement is ignored.
+        manager.abortAndDiscardAll();
+      }
       ctx.ui.notify(
         enabled
           ? `Subagents enabled (${STATE_FILE})`
@@ -83,23 +162,18 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  // /subagents — list this session's subagents (live + on-disk) in the catalog.
-  // Enter opens the live read-only session viewer; the external-editor key
-  // retains the rendered transcript editor flow.
   pi.registerCommand("subagents", {
     description: "List this session's subagents and view live transcripts",
     handler: async (_args, ctx) => {
       if (!isEnabled()) {
-        ctx.ui.notify(DISABLED_MESSAGE, "warning");
+        ctx.ui.notify(SUBAGENTS_DISABLED_MESSAGE, "warning");
         return;
       }
+      display.setContext(ctx);
       await showSessionSubagents(ctx, manager);
     },
   });
 
-  // /show-subagents — read-only catalog of available subagent types and their
-  // config (context, tools, model, thinking, prompt mode). Parallel to
-  // /show-skills and /show-tools.
   pi.registerCommand("show-subagents", {
     description: "Show subagent types available to the agent in this session",
     handler: async (_args, ctx) => {
@@ -107,19 +181,35 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  // Reset tracked agents on session boundaries so prior-session agents don't leak.
-  pi.on("session_start", () => {
-    manager.clearCompleted();
-    syncSubagentTools(pi, enabled);
+  pi.registerShortcut(OPEN_SHORTCUT, {
+    description: "List this session's subagents",
+    handler: async (ctx) => {
+      if (!isEnabled()) {
+        ctx.ui.notify(SUBAGENTS_DISABLED_MESSAGE, "warning");
+        return;
+      }
+      display.setContext(ctx);
+      await showSessionSubagents(ctx, manager);
+    },
   });
-  pi.on("session_before_switch", () => manager.clearCompleted());
 
-  // Abort all children when the parent turn is interrupted / on shutdown.
-  pi.on("before_agent_start", () => {
+  pi.on("session_start", (_event, ctx) => {
+    manager.clearCompleted();
+    display.setContext(ctx);
+    display.setEnabled(enabled);
     syncSubagentTools(pi, enabled);
   });
-  pi.on("turn_start", () => {
-    /* fresh turn — nothing to clean; children abort via their own signals */
+  // Abort all children when the parent turn is interrupted / on shutdown.
+  // A spawn can only happen inside a turn, so refreshing the context here keeps
+  // the widget usable without threading ctx through the manager's observers.
+  pi.on("before_agent_start", (_event, ctx) => {
+    display.setContext(ctx);
+    syncSubagentTools(pi, enabled);
   });
-  pi.on("session_shutdown", () => manager.abortAll());
+  pi.on("session_shutdown", () => {
+    // session_before_switch can be cancelled by another extension. Wait for
+    // shutdown, which only fires once the parent session is actually leaving.
+    display.setEnabled(false);
+    manager.abortAndDiscardAll();
+  });
 }

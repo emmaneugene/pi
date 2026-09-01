@@ -1,0 +1,3 @@
+# Turn Fold keeps upstream formatting so future source comparisons stay focused.
+# Its README and SPEC list the intentional local compatibility changes.
+agent/extensions/turn/fold/

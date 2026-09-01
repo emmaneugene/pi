@@ -76,7 +76,7 @@ After approval, edit the root-level `man-mode` skill (`agent/skills/man-mode/SKI
 - Reference other skills instead of inlining their workflows
 - Keep the frontmatter user-invocable with `disable-model-invocation: true`
 
-Load `writing-guidelines` for the edit. Keep every instruction operational and concise.
+Load `ste-prose` (authoring mode) before the edit. Apply its ambiguity and meaning-preservation rules to every instruction.
 
 ## 6. Validate and report
 

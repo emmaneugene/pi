@@ -107,7 +107,7 @@ default_profile() {
 
 save_state() {
   local port=$1 pid=$2 name=${3:-} headless=${4:-false} dir=$5 \
-        no_sandbox=${6:-false} extra_flags=${7:-}
+        no_sandbox=${6:-false} extra_flags=${7:-} profile_mode=${8:-custom}
   mkdir -p "$STATE_DIR"
   cat > "$(state_file "$port")" <<EOF
 port=$port
@@ -117,6 +117,7 @@ headless=$headless
 dir=$dir
 no_sandbox=$no_sandbox
 extra_flags=$extra_flags
+profile_mode=$profile_mode
 started=$(date -u +%s)
 EOF
 }
@@ -258,8 +259,17 @@ cmd_start() {
 
   mkdir -p "$profile" "$LOG_DIR"
 
-  if [[ "$custom_profile" == "false" && "$new_profile" == "false" ]]; then
-    sync_profile "$profile"
+  # Tracked separately from `profile` so restart can replay how the
+  # directory was chosen (and whether it should be re-synced), not just
+  # which directory it was.
+  local profile_mode="custom"
+  if [[ "$custom_profile" == "false" ]]; then
+    if [[ "$new_profile" == "true" ]]; then
+      profile_mode="managed-empty"
+    else
+      profile_mode="managed-sync"
+      sync_profile "$profile"
+    fi
   fi
   local log; log=$(log_file "$port")
 
@@ -289,7 +299,7 @@ cmd_start() {
 
   kill -0 "$pid" 2>/dev/null || die "Chrome exited unexpectedly. See logs: $log"
 
-  save_state "$port" "$pid" "$name" "$headless" "$profile" "$no_sandbox" "$extra_flags"
+  save_state "$port" "$pid" "$name" "$headless" "$profile" "$no_sandbox" "$extra_flags" "$profile_mode"
 
   local label="${name:+${BOLD}${name}${RESET} }(port ${BOLD}${port}${RESET}, PID ${DIM}${pid}${RESET})"
   info "Started ${label}"
@@ -386,19 +396,27 @@ cmd_restart() {
   port="${port:-$DEFAULT_PORT}"
 
   # Read all saved flags before stopping (state file is removed on stop)
-  local saved_name saved_headless saved_dir saved_no_sandbox saved_extra_flags
+  local saved_name saved_headless saved_dir saved_no_sandbox saved_extra_flags saved_mode
   saved_name=$(get_state "$port" name)        || die "no state found for port $port"
   saved_headless=$(get_state "$port" headless)
   saved_dir=$(get_state "$port" dir)
   saved_no_sandbox=$(get_state "$port" no_sandbox)
   saved_extra_flags=$(get_state "$port" extra_flags)
+  saved_mode=$(get_state "$port" profile_mode)
+  # State files predating profile_mode tracking: preserve today's behavior
+  # (always pin to the saved directory) rather than guessing.
+  saved_mode="${saved_mode:-custom}"
 
   _stop_instance "$port" false
 
   local start_args=("--port" "$port")
   [[ -n "$saved_name" ]]            && start_args+=("--name"        "$saved_name")
   [[ "$saved_headless" == "true" ]] && start_args+=("--headless")
-  [[ -n "$saved_dir" ]]             && start_args+=("--profile"     "$saved_dir")
+  case "$saved_mode" in
+    custom)        start_args+=("--profile" "$saved_dir") ;;
+    managed-empty) start_args+=("--new-profile") ;;
+    managed-sync)  : ;; # default_profile(port,name) resolves to the same dir; sync runs again
+  esac
   [[ "$saved_no_sandbox" == "true" ]] && start_args+=("--no-sandbox")
   [[ -n "$saved_extra_flags" ]]     && start_args+=("--extra-flags" "$saved_extra_flags")
 

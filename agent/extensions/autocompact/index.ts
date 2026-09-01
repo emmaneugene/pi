@@ -10,11 +10,12 @@ import { readJsonFile } from "../../lib/json-state.ts";
  * Trigger compaction once context usage crosses the configured percentage or
  * absolute-token limit for the active model.
  *
- * Pi's built-in auto-compaction triggers on an absolute token reserve
- * (contextWindow - reserveTokens), so its effective percentage varies between
- * models. This extension supports percentage and absolute-token thresholds.
- * When both apply, the lower token limit wins. The built-in compaction stays
- * enabled as an overflow safety net.
+ * This extension supports percentage and absolute-token thresholds. When both
+ * apply, the lower token limit wins. It compacts only after the agent settles,
+ * so compaction does not abort an active run or its attached asynchronous work.
+ *
+ * Keep Pi's built-in auto-compaction enabled for context-overflow recovery.
+ * Manual compaction stays available and is the mechanism this extension uses.
  *
  * Configure via ~/.pi/agent/autocompact.json:
  * {
@@ -133,6 +134,17 @@ function resolveSettings(
   };
 }
 
+function contextUsage(
+  raw: ReturnType<ExtensionContext["getContextUsage"]>,
+): ContextUsage | undefined {
+  if (!raw || raw.tokens === null || raw.percent === null) return undefined;
+  return {
+    tokens: raw.tokens,
+    contextWindow: raw.contextWindow,
+    percent: raw.percent,
+  };
+}
+
 function effectiveThreshold(
   usage: ContextUsage,
   settings: ThresholdSettings,
@@ -171,11 +183,15 @@ function notify(
   if (ctx.hasUI) ctx.ui.notify(message, type);
 }
 
+type CompactionState =
+  | { kind: "ready" }
+  | { kind: "attempted" }
+  | { kind: "compacting" }
+  | { kind: "terminate" };
+
 export default function (pi: ExtensionAPI) {
   let config = loadConfig();
-  let compacting = false;
-  let triedCompactionAboveThreshold = false;
-  let warnedTerminateSession = false;
+  let state: CompactionState = { kind: "ready" };
 
   const updateStatus = (ctx: ExtensionContext) => {
     const settings = resolveSettings(config, ctx);
@@ -192,7 +208,7 @@ export default function (pi: ExtensionAPI) {
     usage: ContextUsage,
     settings: ThresholdSettings,
   ) => {
-    warnedTerminateSession = true;
+    state = { kind: "terminate" };
     setStatus(ctx, "autocompact: terminate session");
     notify(
       ctx,
@@ -208,42 +224,41 @@ export default function (pi: ExtensionAPI) {
   // Reload config each session so edits to autocompact.json take effect on /reload or /new.
   pi.on("session_start", (_event, ctx) => {
     config = loadConfig();
-    compacting = false;
-    triedCompactionAboveThreshold = false;
-    warnedTerminateSession = false;
+    state = { kind: "ready" };
     updateStatus(ctx);
   });
 
   pi.on("model_select", (_event, ctx) => {
-    triedCompactionAboveThreshold = false;
-    warnedTerminateSession = false;
+    // A compaction may still be running for the model being switched away
+    // from; leave its outcome alone rather than discarding it mid-flight.
+    if (state.kind !== "compacting") state = { kind: "ready" };
     updateStatus(ctx);
   });
 
-  // Avoid racing with Pi's built-in compaction
-  pi.on("agent_settled", (_event, ctx) => {
+  const compactIfNeeded = (ctx: ExtensionContext) => {
     const settings = resolveSettings(config, ctx);
-    if (!settings.enabled || compacting || warnedTerminateSession) return;
-
-    const rawUsage = ctx.getContextUsage();
-    if (!rawUsage || rawUsage.tokens === null || rawUsage.percent === null) {
+    if (
+      !settings.enabled ||
+      state.kind === "compacting" ||
+      state.kind === "terminate"
+    )
       return;
-    }
-    const usage: ContextUsage = rawUsage;
+
+    const usage = contextUsage(ctx.getContextUsage());
+    if (!usage) return;
     const threshold = effectiveThreshold(usage, settings);
 
     if (usage.tokens < threshold.tokens) {
-      triedCompactionAboveThreshold = false;
+      state = { kind: "ready" };
       return;
     }
 
-    if (triedCompactionAboveThreshold) {
+    if (state.kind === "attempted") {
       warnTerminateSession(ctx, usage, settings);
       return;
     }
 
-    compacting = true;
-    triedCompactionAboveThreshold = true;
+    state = { kind: "compacting" };
     const limit =
       threshold.source === "tokens"
         ? `${threshold.tokens.toLocaleString()} tokens`
@@ -255,18 +270,15 @@ export default function (pi: ExtensionAPI) {
     );
     ctx.compact({
       onComplete: () => {
-        compacting = false;
+        // Pi reports null usage until the first post-compaction assistant
+        // response. Default to "attempted" so that response can still verify
+        // the new context size; the checks below refine it when usage is
+        // already known.
+        state = { kind: "attempted" };
         notify(ctx, "Compaction complete.", "info");
 
-        // Pi reports null usage until the first post-compaction assistant response.
-        // Keep the attempt flag set so that response can verify the new context size.
-        const rawPostCompactUsage = ctx.getContextUsage();
-        if (
-          rawPostCompactUsage?.tokens !== null &&
-          rawPostCompactUsage?.tokens !== undefined &&
-          rawPostCompactUsage.percent !== null
-        ) {
-          const postCompactUsage: ContextUsage = rawPostCompactUsage;
+        const postCompactUsage = contextUsage(ctx.getContextUsage());
+        if (postCompactUsage) {
           const postCompactSettings = resolveSettings(config, ctx);
           const postCompactThreshold = effectiveThreshold(
             postCompactUsage,
@@ -275,15 +287,20 @@ export default function (pi: ExtensionAPI) {
           if (postCompactUsage.tokens >= postCompactThreshold.tokens) {
             warnTerminateSession(ctx, postCompactUsage, postCompactSettings);
           } else {
-            triedCompactionAboveThreshold = false;
+            state = { kind: "ready" };
           }
         }
       },
       onError: (error) => {
-        compacting = false;
-        triedCompactionAboveThreshold = false;
+        state = { kind: "ready" };
         notify(ctx, `Compaction failed: ${error.message}`, "error");
       },
     });
+  };
+
+  // Compact only completed runs. Pi's built-in compaction handles context
+  // overflow and continues the interrupted run without aborting attached work.
+  pi.on("agent_settled", (_event, ctx) => {
+    compactIfNeeded(ctx);
   });
 }

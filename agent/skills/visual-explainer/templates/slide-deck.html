@@ -469,13 +469,9 @@
       .mermaid .edgeLabel rect {
         fill: var(--bg) !important;
       }
-      .slide--diagram .mermaid .nodeLabel {
-        font-size: 18px !important;
-      }
-      .slide--diagram .mermaid .edgeLabel {
-        font-family: var(--font-mono) !important;
-        font-size: 14px !important;
-      }
+      /* Label size lives in themeVariables.fontSize (18px below) — never
+         resize/refont .nodeLabel/.edgeLabel post-render, it clips the text.
+         Color overrides above are safe (no metric change). */
       .slide--diagram .mermaid .node rect,
       .slide--diagram .mermaid .node circle,
       .slide--diagram .mermaid .node polygon {
@@ -1516,6 +1512,9 @@
         render();
       }
 
+      // Fonts must be loaded before Mermaid measures labels, or boxes are
+      // sized for the fallback font and the webfont overflows them.
+      await document.fonts.ready;
       document.querySelectorAll(".diagram-shell").forEach(initDiagram);
       autoFit();
       new SlideEngine();

@@ -1,8 +1,7 @@
 ---
 description: Pre-commit code reviewer — critiques diffs/staged changes for bugs, security, and convention drift. Read-only, no edits. Use before committing or to audit a changeset.
 display_name: Review
-tools: read, bash, mcp
-model: openai-codex/gpt-5.5
+model: openai-codex/gpt-5.6-sol
 thinking: medium
 prompt_mode: replace
 ---

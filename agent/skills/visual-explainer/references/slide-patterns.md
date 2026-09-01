@@ -667,38 +667,14 @@ Full-viewport Mermaid diagram. Max 8–10 nodes (presentation scale — fewer, l
 - **Use CSS Pipeline** (below) for simple linear flows: A → B → C → D sequences, build steps, deployment stages. CSS cards give full control over sizing, typography, and fill the viewport naturally.
 - **Never leave a small Mermaid diagram alone on a slide.** If the diagram is small, either switch to CSS, or pair it with supporting content (description cards, bullet annotations, a summary panel) in a split layout. A slide with a tiny diagram and empty space is a failed slide.
 
-**Use the canonical `diagram-shell` pattern** (same engine as `css-patterns.md` / `mermaid-flowchart.html`) — never a bare `<pre class="mermaid">` with inline `onclick` handlers. In slides the `.mermaid-wrap` fills the slide via `flex: 1`, and the engine fits the diagram to the viewport. `slide-deck.html` ships a slide-adapted `initDiagram` (it omits the page engine's `setAdaptiveHeight`, since the slide's flex column gives the wrap its height).
+**Start from the canonical `diagram-shell`.** Copy it from `templates/mermaid-flowchart.html`; do not recreate its controls or interaction engine here. `templates/slide-deck.html` contains the slide adaptation. It lets `.mermaid-wrap` fill the remaining height and omits page-level adaptive-height logic.
+
+A diagram slide adds only a heading around that canonical shell:
 
 ```html
 <section class="slide slide--diagram">
-  <h2 class="slide__heading reveal">Diagram Title</h2>
-  <div class="diagram-shell reveal">
-    <div class="mermaid-wrap">
-      <div class="zoom-controls">
-        <button type="button" data-action="zoom-in" title="Zoom in">+</button>
-        <button type="button" data-action="zoom-out" title="Zoom out">
-          &minus;
-        </button>
-        <button type="button" data-action="zoom-fit" title="Smart fit">
-          &#8634;
-        </button>
-        <button type="button" data-action="zoom-one" title="1:1 zoom">
-          1:1
-        </button>
-        <button type="button" data-action="zoom-expand" title="Open full size">
-          &#x26F6;
-        </button>
-        <span class="zoom-label">Loading...</span>
-      </div>
-      <div class="mermaid-viewport">
-        <div class="mermaid mermaid-canvas"></div>
-      </div>
-    </div>
-    <script type="text/plain" class="diagram-source">
-      graph TD
-        A --> B
-    </script>
-  </div>
+  <h2 class="slide__heading reveal">Diagram title</h2>
+  <!-- canonical diagram-shell from the template -->
 </section>
 ```
 
@@ -745,17 +721,9 @@ Full-viewport Mermaid diagram. Max 8–10 nodes (presentation scale — fewer, l
 
 The engine controls the SVG's size for zoom/pan, so there is **no** `width: 100% !important` rule on `.mermaid svg` (that would override the engine's inline sizing and break zoom) and **no** `autoFit()` resizing of diagram SVGs.
 
-**Mermaid overrides for presentation scale** (add alongside the standard Mermaid CSS overrides from `libraries.md`):
+**Mermaid overrides for presentation scale**: set label size up front via `themeVariables.fontSize: "18px"` in `mermaid.initialize()` — never resize `.nodeLabel`/`.edgeLabel` with CSS after render, because Mermaid sizes label boxes at measure time and post-render font changes clip the text. Stroke weights are safe to bump in CSS:
 
 ```css
-.slide--diagram .mermaid .nodeLabel {
-  font-size: 18px !important;
-}
-
-.slide--diagram .mermaid .edgeLabel {
-  font-size: 14px !important;
-}
-
 .slide--diagram .mermaid .node rect,
 .slide--diagram .mermaid .node circle,
 .slide--diagram .mermaid .node polygon {

@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import {
+  shouldNotifyOnAgentEnd,
+  SUPPRESS_AGENT_END_NOTIFICATION_ENTRY,
+} from "../../../lib/session-notification-policy.ts";
 import { formatNotification, markdownToNotificationText } from "../index.ts";
 
 describe("markdownToNotificationText", () => {
@@ -44,6 +48,35 @@ describe("markdownToNotificationText", () => {
     assert.equal(
       markdownToNotificationText("Result: [unfinished](https://example.com"),
       "Result: [unfinished](https://example.com",
+    );
+  });
+});
+
+describe("shouldNotifyOnAgentEnd", () => {
+  it("notifies by default", () => {
+    assert.equal(shouldNotifyOnAgentEnd([]), true);
+    assert.equal(shouldNotifyOnAgentEnd([{ type: "message" }]), true);
+  });
+
+  it("does not notify when the session has the suppression marker", () => {
+    assert.equal(
+      shouldNotifyOnAgentEnd([
+        {
+          type: "custom",
+          customType: SUPPRESS_AGENT_END_NOTIFICATION_ENTRY,
+        },
+      ]),
+      false,
+    );
+  });
+
+  it("ignores unrelated entries", () => {
+    assert.equal(
+      shouldNotifyOnAgentEnd([
+        { type: "custom", customType: "other" },
+        { customType: SUPPRESS_AGENT_END_NOTIFICATION_ENTRY },
+      ]),
+      true,
     );
   });
 });

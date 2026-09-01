@@ -1,7 +1,6 @@
 ---
 name: blast-radius
 description: "Find what a change could break somewhere else before it ships, beyond the diff, and prove the one fact it's safe because of by running real code instead of writing it up. Use for 'blast radius of X', 'what could this break', or reviewing a small diff you don't trust."
-disable-model-invocation: false
 source: https://github.com/cursor/plugins/tree/main/pstack/skills/blast-radius
 ---
 
@@ -46,6 +45,6 @@ Any safety fact you can't get to step 4, say so out loud. Don't write it up as s
 - **Cleared.** What you checked and why it's fine.
 - **Before you merge.** The cheapest test or repro that catches the real bug, including the script you wrote.
 
-Write it per `writing-guidelines`, cite real code, and strip anything private before it goes anywhere public.
+Before you reply, load `ste-prose` (authoring mode) and remove ambiguity from the handback. Preserve every probability, severity, and evidence qualifier. Cite real code, and strip anything private before it goes anywhere public.
 
 **Reply:** the writeup above, with the one safety fact either proven or marked unproven.

@@ -5,6 +5,7 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { transcriptContent } from "./content.ts";
 import {
   type InvocationSettingSource,
   SUBAGENT_INVOCATION_ENTRY,
@@ -26,21 +27,6 @@ export interface DiskTranscript {
   turns: number;
   /** mtime epoch ms, for sorting. */
   mtime: number;
-}
-
-function textOf(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  const out: string[] = [];
-  for (const p of content) {
-    if (!p || typeof p !== "object") continue;
-    const part = p as Record<string, unknown>;
-    if (part.type === "text" && typeof part.text === "string")
-      out.push(part.text);
-    else if (part.type === "toolCall")
-      out.push(`[tool call: ${part.name ?? part.toolName ?? "?"}]`);
-  }
-  return out.join("");
 }
 
 const INVOCATION_SOURCES = new Set<InvocationSettingSource>([
@@ -91,7 +77,10 @@ function transcriptSummary(file: string): {
       const e = JSON.parse(line);
       if (e.type === "message" && e.message?.role === "assistant") turns++;
       if (!task && e.type === "message" && e.message?.role === "user") {
-        task = textOf(e.message.content).trim().split("\n")[0].slice(0, 80);
+        task = transcriptContent(e.message.content)
+          .trim()
+          .split("\n")[0]
+          .slice(0, 80);
       } else if (
         e.type === "custom" &&
         e.customType === SUBAGENT_INVOCATION_ENTRY
@@ -200,7 +189,7 @@ export function renderTranscriptText(file: string): string {
     }
     if (e.type === "message") {
       const role = e.message?.role ?? "?";
-      const body = textOf(e.message?.content).trim();
+      const body = transcriptContent(e.message?.content).trim();
       if (!body) continue;
       blocks.push(`── ${String(role).toUpperCase()} ──\n${body}`);
     }

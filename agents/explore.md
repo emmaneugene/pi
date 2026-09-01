@@ -1,8 +1,7 @@
 ---
 description: Fast read-only search agent for locating code - find files, grep symbols, answer where-is-X. Read-only — no file edits.
 display_name: Explore
-tools: read, bash
-model: openrouter/deepseek/deepseek-v4-flash
+model: openai-codex/gpt-5.6-luna
 thinking: high
 prompt_mode: replace
 ---

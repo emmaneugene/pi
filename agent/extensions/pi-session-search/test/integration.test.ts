@@ -1,17 +1,12 @@
-/*
-Copyright 2026 Adobe. All rights reserved.
-This file is licensed to you under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License. You may obtain a copy
-of the License at http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under
-the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR REPRESENTATIONS
-OF ANY KIND, either express or implied. See the License for the specific language
-governing permissions and limitations under the License.
-*/
-
 import { strict as assert } from "node:assert";
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -254,6 +249,7 @@ describe("searchSessions (integration)", () => {
 describe("readSessionWindow (integration)", () => {
   const original = process.env.PI_SESSION_SEARCH_ROOT;
   const originalMax = process.env.PI_SESSION_SEARCH_MAX_BYTES;
+  const originalMaxLine = process.env.PI_SESSION_SEARCH_MAX_LINE_BYTES;
 
   let fixture: ReturnType<typeof buildFixtureSessions>;
 
@@ -268,6 +264,9 @@ describe("readSessionWindow (integration)", () => {
     if (originalMax === undefined)
       delete process.env.PI_SESSION_SEARCH_MAX_BYTES;
     else process.env.PI_SESSION_SEARCH_MAX_BYTES = originalMax;
+    if (originalMaxLine === undefined)
+      delete process.env.PI_SESSION_SEARCH_MAX_LINE_BYTES;
+    else process.env.PI_SESSION_SEARCH_MAX_LINE_BYTES = originalMaxLine;
   });
 
   it("returns a markdown-formatted window for an in-root path", async () => {
@@ -307,13 +306,140 @@ describe("readSessionWindow (integration)", () => {
     );
   });
 
-  it("rejects files larger than PI_SESSION_SEARCH_MAX_BYTES", async () => {
-    // Lower the cap so our fixture is over the limit
-    process.env.PI_SESSION_SEARCH_MAX_BYTES = "100";
+  it("streams opening, centered, and final windows from a source larger than the byte cap", async () => {
+    appendFileSync(
+      fixture.sessionFile,
+      [
+        "{malformed-json",
+        ...Array.from({ length: 20 }, (_, index) =>
+          JSON.stringify({
+            type: "custom",
+            data: "x".repeat(200),
+            index,
+          }),
+        ),
+        JSON.stringify({
+          type: "message",
+          timestamp: "2026-04-23T06:49:00.000Z",
+          message: { role: "user", content: "final readable message" },
+        }),
+      ].join("\n") + "\n",
+    );
+    process.env.PI_SESSION_SEARCH_MAX_BYTES = "1000";
+    assert.ok(statSync(fixture.sessionFile).size > 1000);
+
+    const opening = await readSessionWindow({
+      sessionFile: fixture.sessionFile,
+      maxMessages: 1,
+    });
+    assert.match(opening, /Have we ever discussed vault-overseer/);
+    assert.ok(!opening.includes("ExternalSecret error"));
+
+    const centered = await readSessionWindow({
+      sessionFile: fixture.sessionFile,
+      aroundTimestamp: "2026-04-23T06:48:15.000Z",
+      contextMessages: 0,
+      maxMessages: 1,
+    });
+    assert.match(centered, /ExternalSecret error/);
+    assert.ok(!centered.includes("Have we ever discussed"));
+
+    const final = await readSessionWindow({
+      sessionFile: fixture.sessionFile,
+      aroundTimestamp: "2099-01-01T00:00:00.000Z",
+      contextMessages: 0,
+      maxMessages: 1,
+    });
+    assert.match(final, /final readable message/);
+  });
+
+  it("caps an oversized returned window with an explicit notice", async () => {
+    process.env.PI_SESSION_SEARCH_MAX_BYTES = "200";
+    const out = await readSessionWindow({ sessionFile: fixture.sessionFile });
+    assert.ok(Buffer.byteLength(out, "utf8") <= 200);
+    assert.match(out, /Output truncated at PI_SESSION_SEARCH_MAX_BYTES/);
+  });
+
+  it("uses the complete output cap when no truncation notice is needed", async () => {
+    const options = { sessionFile: fixture.sessionFile, maxMessages: 1 };
+    const uncapped = await readSessionWindow(options);
+    process.env.PI_SESSION_SEARCH_MAX_BYTES = String(
+      Buffer.byteLength(uncapped, "utf8"),
+    );
+    const capped = await readSessionWindow(options);
+    assert.equal(capped, uncapped);
+    assert.ok(!capped.includes("Output truncated"));
+  });
+
+  it("rejects a single JSONL record that crosses stream chunks and the line-memory cap", async () => {
+    const maxLineBytes = 70 * 1024;
+    process.env.PI_SESSION_SEARCH_MAX_LINE_BYTES = String(maxLineBytes);
+    appendFileSync(
+      fixture.sessionFile,
+      JSON.stringify({
+        type: "message",
+        timestamp: "2026-04-23T06:49:00.000Z",
+        message: { role: "user", content: "x".repeat(80 * 1024) },
+      }) + "\n",
+    );
     await assert.rejects(
       () => readSessionWindow({ sessionFile: fixture.sessionFile }),
-      /exceeds PI_SESSION_SEARCH_MAX_BYTES/,
+      new RegExp(
+        `record larger than PI_SESSION_SEARCH_MAX_LINE_BYTES \\(${maxLineBytes}\\)`,
+      ),
     );
+  });
+
+  it("parses a final JSONL record without a trailing newline", async () => {
+    appendFileSync(
+      fixture.sessionFile,
+      JSON.stringify({
+        type: "message",
+        timestamp: "2026-04-23T06:49:00.000Z",
+        message: { role: "user", content: "unterminated final record" },
+      }),
+    );
+    const out = await readSessionWindow({
+      sessionFile: fixture.sessionFile,
+      aroundTimestamp: "2099-01-01T00:00:00.000Z",
+      contextMessages: 0,
+      maxMessages: 1,
+    });
+    assert.match(out, /unterminated final record/);
+  });
+
+  it("validates read-window counts and accepts the hard-cap boundary", async () => {
+    await assert.rejects(
+      () =>
+        readSessionWindow({
+          sessionFile: fixture.sessionFile,
+          contextMessages: -1,
+        }),
+      /contextMessages must be an integer in \[0, 1000\]/,
+    );
+    await assert.rejects(
+      () =>
+        readSessionWindow({
+          sessionFile: fixture.sessionFile,
+          contextMessages: 1.5,
+        }),
+      /contextMessages must be an integer/,
+    );
+    await assert.rejects(
+      () =>
+        readSessionWindow({
+          sessionFile: fixture.sessionFile,
+          maxMessages: 1001,
+        }),
+      /maxMessages must be an integer in \[1, 1000\]/,
+    );
+
+    const out = await readSessionWindow({
+      sessionFile: fixture.sessionFile,
+      contextMessages: 1000,
+      maxMessages: 1000,
+    });
+    assert.match(out, /vault-overseer/);
   });
 
   it("refuses a symlinked file that escapes the root, even by relative path", async () => {

@@ -1,7 +1,7 @@
 /**
  * pi-welcome-screen — Replace Pi's startup header with centered branding and a compact resource summary.
  *
- * Vendored from @pi-kaush/pi-welcome-screen v0.1.2
+ * Vendored from @pi-kaush/pi-welcome-screen v0.1.5
  * Source: https://github.com/kaushikgopal/pi-kaush/tree/main/extensions/pi-welcome-screen
  * Author: Kaushik Gopal — License: MIT
  */
@@ -23,19 +23,16 @@ import {
 } from "@earendil-works/pi-tui";
 
 const MAX_STACKED_COLUMN_WIDTH = 80;
-const MAX_RESOURCE_COLUMN_WIDTH = 80;
-const BRAND_COLUMN_WIDTH = 40;
-const WIDE_COLUMN_GAP = 4;
-const MIN_WIDE_RESOURCE_COLUMN_WIDTH = 60;
-const MIN_WIDE_LAYOUT_WIDTH =
-  BRAND_COLUMN_WIDTH + WIDE_COLUMN_GAP + MIN_WIDE_RESOURCE_COLUMN_WIDTH;
-const MAX_WIDE_LAYOUT_WIDTH =
-  BRAND_COLUMN_WIDTH + WIDE_COLUMN_GAP + MAX_RESOURCE_COLUMN_WIDTH;
+const MIN_GRID_COLUMN_WIDTH = 40;
+const MAX_GRID_COLUMN_WIDTH = 60;
+const GRID_COLUMN_GAP = 4;
 const MAX_LIST_ROWS_PER_COLUMN = 6;
 const MIN_LIST_COLUMN_WIDTH = 22;
 const LIST_COLUMN_GAP = 2;
 const RESOURCE_POLL_INTERVAL_MS = 50;
 const MAX_RESOURCE_RETRIES = 3;
+const LAYOUT_NOTICE =
+  "pi-welcome-screen: unrecognized Pi layout — using native panel";
 const RESOURCE_PANEL_INDEX = 1;
 const RESOURCE_BRIDGE_KEY = "__piKaushWelcomeScreenResourceBridge";
 
@@ -73,7 +70,13 @@ interface ResourcePanel extends Component {
   children: Component[];
 }
 
+interface ResourcePanelHost {
+  children: Component[];
+  removeChild(component: Component): void;
+}
+
 interface ResourceBridge {
+  host: ResourcePanelHost;
   panel: ResourcePanel;
   originalIndex: number;
 }
@@ -97,6 +100,15 @@ function isResourcePanel(
 ): component is ResourcePanel {
   if (!component || typeof component !== "object") return false;
   return Array.isArray((component as Partial<Container>).children);
+}
+
+function isResourcePanelHost(
+  component: Component | undefined,
+): component is ResourcePanel & ResourcePanelHost {
+  return (
+    isResourcePanel(component) &&
+    typeof (component as Partial<Container>).removeChild === "function"
+  );
 }
 
 function getSectionHeading(text: string): string | undefined {
@@ -209,6 +221,79 @@ function normalizePackageSource(label: string): string {
   return label.replace(/^(?:npm|git):/, "");
 }
 
+interface GitPackageSource {
+  label: string;
+  revision: string | undefined;
+}
+
+function splitGitRevision(pathWithRevision: string): {
+  path: string;
+  revision: string | undefined;
+} {
+  const separator = pathWithRevision.indexOf("@");
+  if (separator === -1) return { path: pathWithRevision, revision: undefined };
+  return {
+    path: pathWithRevision.slice(0, separator),
+    revision: pathWithRevision.slice(separator + 1),
+  };
+}
+
+function parseGitPackageSource(source: string): GitPackageSource {
+  const value = source.replace(/^git:/, "");
+  const scpMatch = value.match(/^git@([^:]+):(.+)$/);
+  if (scpMatch) {
+    const { path, revision } = splitGitRevision(scpMatch[2] ?? "");
+    return {
+      label: `${scpMatch[1] ?? ""}/${path}`.replace(/\.git$/, ""),
+      revision,
+    };
+  }
+
+  if (value.includes("://")) {
+    try {
+      const url = new URL(value);
+      const { path, revision } = splitGitRevision(
+        url.pathname.replace(/^\/+/, ""),
+      );
+      return {
+        label: `${url.hostname}/${path}`.replace(/\.git$/, ""),
+        revision,
+      };
+    } catch {
+      return { label: value, revision: undefined };
+    }
+  }
+
+  const slash = value.indexOf("/");
+  if (slash === -1) return { label: value, revision: undefined };
+  const { path, revision } = splitGitRevision(value.slice(slash + 1));
+  return {
+    label: `${value.slice(0, slash)}/${path}`.replace(/\.git$/, ""),
+    revision,
+  };
+}
+
+function formatPackageExtensionLabel(
+  source: string,
+  extensionPaths: string[],
+): string {
+  const extensionNames = unique(
+    extensionPaths
+      .map((path) => path.replace(/\\/g, "/").split("/").pop() ?? "")
+      .filter((name) => /\.[cm]?[jt]s$/.test(name)),
+  );
+  if (!source.startsWith("git:")) {
+    return [normalizePackageSource(source), ...extensionNames].join(" ");
+  }
+
+  const { label, revision } = parseGitPackageSource(source);
+  return [
+    label,
+    ...extensionNames,
+    ...(revision ? [`@${revision.slice(0, 6)}`] : []),
+  ].join(" ");
+}
+
 function isExplicitSourcePath(label: string): boolean {
   const normalized = label.replace(/\\/g, "/");
   return (
@@ -231,16 +316,34 @@ function parseExpandedExtensionGroups(
   const packageExtensions: string[] = [];
   const sourceExtensions: string[] = [];
   let foundItem = false;
+  let currentPackageSource: string | undefined;
+  let currentPackagePaths: string[] = [];
+  const flushPackage = () => {
+    if (!currentPackageSource) return;
+    packageExtensions.push(
+      formatPackageExtensionLabel(currentPackageSource, currentPackagePaths),
+    );
+    currentPackageSource = undefined;
+    currentPackagePaths = [];
+  };
 
   for (const rawLine of text.split("\n").slice(1)) {
     const line = stripAnsi(rawLine).replace(/\s+$/, "");
     const packageSource = line.match(/^ {4}((?:npm|git):.+)$/)?.[1];
     if (packageSource) {
-      packageExtensions.push(normalizePackageSource(packageSource));
+      flushPackage();
+      currentPackageSource = packageSource;
       foundItem = true;
       continue;
     }
 
+    const packagePath = line.match(/^ {6}(\S.*)$/)?.[1];
+    if (packagePath && currentPackageSource) {
+      currentPackagePaths.push(packagePath);
+      continue;
+    }
+
+    flushPackage();
     const path = line.match(/^ {4}(\S.*)$/)?.[1];
     if (!path || /^(?:project|user|path)$/.test(path)) continue;
 
@@ -257,6 +360,8 @@ function parseExpandedExtensionGroups(
     }
     foundItem = true;
   }
+
+  flushPackage();
 
   if (!foundItem) return undefined;
   return {
@@ -368,23 +473,57 @@ export function parseWelcomeResources(
 }
 
 function takeResourcePanel(tui: TUI): ResourceBridge | undefined {
-  const host = tui as BridgeTui;
-  if (host[RESOURCE_BRIDGE_KEY]) return undefined;
+  const keyed = tui as BridgeTui;
+  const existing = keyed[RESOURCE_BRIDGE_KEY];
+  if (existing) {
+    if (!existing.host.children.includes(existing.panel)) return existing;
+    delete keyed[RESOURCE_BRIDGE_KEY];
+  }
 
   // TODO: Replace this bridge when Pi exposes structured startup resources
   // through its custom-header API.
-  // Pi 0.80 places the loaded-resources container immediately after the
-  // header. Guard the full shape so an upstream layout change falls back to
-  // Pi's untouched resource panel instead of moving an unrelated component.
-  if (tui.children.length < 8 || !isResourcePanel(tui.children[0]))
-    return undefined;
-  const panel = tui.children[RESOURCE_PANEL_INDEX];
-  if (!isResourcePanel(panel)) return undefined;
+  // Guard each full layout shape so an upstream change falls back to Pi's
+  // untouched resource panel instead of moving an unrelated component.
+  //
+  // Pi 0.84 nests the loaded-resources container inside a document container
+  // at tui.children[0]: [header, loaded-resources, chat].
+  const documentContainer = tui.children[0];
+  if (isResourcePanelHost(documentContainer)) {
+    const [header, panel, chat] = documentContainer.children;
+    if (
+      isResourcePanel(header) &&
+      isResourcePanel(panel) &&
+      isResourcePanel(chat)
+    ) {
+      const bridge: ResourceBridge = {
+        host: documentContainer,
+        panel,
+        originalIndex: RESOURCE_PANEL_INDEX,
+      };
+      documentContainer.removeChild(panel);
+      keyed[RESOURCE_BRIDGE_KEY] = bridge;
+      return bridge;
+    }
+  }
 
-  const bridge = { panel, originalIndex: RESOURCE_PANEL_INDEX };
-  tui.removeChild(panel);
-  host[RESOURCE_BRIDGE_KEY] = bridge;
-  return bridge;
+  // Pi 0.80–0.83 place the loaded-resources container directly at
+  // tui.children[1], immediately after the header container.
+  if (
+    tui.children.length >= 8 &&
+    isResourcePanel(tui.children[0]) &&
+    isResourcePanel(tui.children[RESOURCE_PANEL_INDEX])
+  ) {
+    const bridge: ResourceBridge = {
+      host: tui,
+      panel: tui.children[RESOURCE_PANEL_INDEX],
+      originalIndex: RESOURCE_PANEL_INDEX,
+    };
+    tui.removeChild(bridge.panel);
+    keyed[RESOURCE_BRIDGE_KEY] = bridge;
+    return bridge;
+  }
+
+  return undefined;
 }
 
 function restoreResourcePanel(
@@ -393,9 +532,9 @@ function restoreResourcePanel(
 ): void {
   if (!bridge) return;
 
-  if (!tui.children.includes(bridge.panel)) {
-    const index = Math.min(bridge.originalIndex, tui.children.length);
-    tui.children.splice(index, 0, bridge.panel);
+  if (!bridge.host.children.includes(bridge.panel)) {
+    const index = Math.min(bridge.originalIndex, bridge.host.children.length);
+    bridge.host.children.splice(index, 0, bridge.panel);
   }
   delete (tui as BridgeTui)[RESOURCE_BRIDGE_KEY];
 }
@@ -628,11 +767,52 @@ function renderBrandColumn(theme: Theme, columnWidth: number): string[] {
     );
   }
   lines.push("");
-  const versionSummary = theme.fg("dim", `v${VERSION}`);
+  const versionSummary = theme.fg(
+    "dim",
+    theme.name ? `v${VERSION} [${theme.name}]` : `v${VERSION}`,
+  );
   lines.push(
     centerBlockLine(versionSummary, visibleWidth(versionSummary), columnWidth),
   );
   return lines;
+}
+
+function appendResourceSection(
+  lines: string[],
+  title: WelcomeSection,
+  resources: WelcomeResources,
+  theme: Theme,
+  columnWidth: number,
+  sharedColumnCount: 2 | 3,
+): void {
+  if (title === "Extensions") {
+    appendExtensionsSection(
+      lines,
+      resources.extensions,
+      resources.packageExtensions ?? resources.vendoredExtensions,
+      resources.sourceExtensions,
+      theme,
+      columnWidth,
+      sharedColumnCount,
+    );
+    return;
+  }
+
+  const body =
+    title === "Context"
+      ? resources.context
+      : title === "Skills"
+        ? resources.skills
+        : resources.prompts;
+  appendSection(
+    lines,
+    title,
+    body,
+    theme,
+    columnWidth,
+    title === "Context",
+    title === "Skills" ? sharedColumnCount : undefined,
+  );
 }
 
 function renderResourceColumn(
@@ -642,22 +822,39 @@ function renderResourceColumn(
 ): string[] {
   const lines: string[] = [];
   const sharedColumnCount = getSharedMultiColumnCount(resources, columnWidth);
-  appendSection(lines, "Context", resources.context, theme, columnWidth, true);
-  appendSection(
+  for (const title of WELCOME_SECTIONS)
+    appendResourceSection(
+      lines,
+      title,
+      resources,
+      theme,
+      columnWidth,
+      sharedColumnCount,
+    );
+  return lines;
+}
+
+type WelcomeGridItem = "Brand" | WelcomeSection;
+
+const GRID_COLUMNS: Record<2 | 3, readonly (readonly WelcomeGridItem[])[]> = {
+  2: [["Context", "Skills", "Prompts"], ["Extensions"]],
+  3: [["Brand"], ["Context", "Skills", "Prompts"], ["Extensions"]],
+};
+
+function renderGridItem(
+  item: WelcomeGridItem,
+  resources: WelcomeResources,
+  theme: Theme,
+  columnWidth: number,
+  sharedColumnCount: 2 | 3,
+): string[] {
+  if (item === "Brand") return renderBrandColumn(theme, columnWidth);
+
+  const lines: string[] = [];
+  appendResourceSection(
     lines,
-    "Skills",
-    resources.skills,
-    theme,
-    columnWidth,
-    false,
-    sharedColumnCount,
-  );
-  appendSection(lines, "Prompts", resources.prompts, theme, columnWidth);
-  appendExtensionsSection(
-    lines,
-    resources.extensions,
-    resources.packageExtensions ?? resources.vendoredExtensions,
-    resources.sourceExtensions,
+    item,
+    resources,
     theme,
     columnWidth,
     sharedColumnCount,
@@ -665,12 +862,66 @@ function renderResourceColumn(
   return lines;
 }
 
+function renderGridWelcome(
+  resources: WelcomeResources,
+  theme: Theme,
+  columnWidth: number,
+  columnCount: 2 | 3,
+): string[] {
+  const sharedColumnCount = getSharedMultiColumnCount(resources, columnWidth);
+  const topAlignedColumns = GRID_COLUMNS[columnCount].map((items) =>
+    items.flatMap((item, index) => [
+      ...(index > 0 ? [""] : []),
+      ...renderGridItem(item, resources, theme, columnWidth, sharedColumnCount),
+    ]),
+  );
+  const rowCount = Math.max(
+    ...topAlignedColumns.map((column) => column.length),
+  );
+  if (columnCount === 2) {
+    const layoutWidth = columnWidth * 2 + GRID_COLUMN_GAP;
+    const resourceRows = Array.from({ length: rowCount }, (_, row) =>
+      topAlignedColumns
+        .map((column) => padToWidth(column[row] ?? "", columnWidth))
+        .join(" ".repeat(GRID_COLUMN_GAP))
+        .trimEnd(),
+    );
+    return ["", ...renderBrandColumn(theme, layoutWidth), "", ...resourceRows];
+  }
+
+  const columns = topAlignedColumns.map((column, index) =>
+    index === 0
+      ? [
+          ...Array.from(
+            { length: Math.floor((rowCount - column.length) / 2) },
+            () => "",
+          ),
+          ...column,
+        ]
+      : column,
+  );
+
+  return Array.from({ length: rowCount }, (_, row) =>
+    columns
+      .map((column) => padToWidth(column[row] ?? "", columnWidth))
+      .join(" ".repeat(GRID_COLUMN_GAP))
+      .trimEnd(),
+  );
+}
+
 function renderStackedWelcome(
   resources: WelcomeResources | undefined,
   theme: Theme,
   columnWidth: number,
+  notice?: string,
 ): string[] {
   const lines = ["", ...renderBrandColumn(theme, columnWidth)];
+  if (notice) {
+    const noticeText = theme.fg("dim", notice);
+    lines.push(
+      centerBlockLine(noticeText, visibleWidth(noticeText), columnWidth),
+    );
+  }
   if (resources)
     lines.push("", ...renderResourceColumn(resources, theme, columnWidth));
   lines.push("");
@@ -682,50 +933,36 @@ function padToWidth(text: string, width: number): string {
   return clipped + " ".repeat(Math.max(0, width - visibleWidth(clipped)));
 }
 
-function renderWideWelcome(
-  resources: WelcomeResources,
-  theme: Theme,
-  layoutWidth: number,
-): string[] {
-  const resourceColumnWidth =
-    layoutWidth - BRAND_COLUMN_WIDTH - WIDE_COLUMN_GAP;
-  const brandLines = renderBrandColumn(theme, BRAND_COLUMN_WIDTH);
-  const resourceLines = renderResourceColumn(
-    resources,
-    theme,
-    resourceColumnWidth,
-  );
-  const rowCount = Math.max(brandLines.length, resourceLines.length);
-  const brandTopPadding = Math.floor((rowCount - brandLines.length) / 2);
-
-  return Array.from({ length: rowCount }, (_, row) => {
-    const brandLine = brandLines[row - brandTopPadding] ?? "";
-    const resourceLine = resourceLines[row] ?? "";
-    const combined = [
-      padToWidth(brandLine, BRAND_COLUMN_WIDTH),
-      " ".repeat(WIDE_COLUMN_GAP),
-      truncateToWidth(resourceLine, resourceColumnWidth, ""),
-    ].join("");
-    return combined.trimEnd();
-  });
+function getGridColumnCount(width: number): 1 | 2 | 3 {
+  if (width >= MIN_GRID_COLUMN_WIDTH * 3 + GRID_COLUMN_GAP * 2) return 3;
+  if (width >= MIN_GRID_COLUMN_WIDTH * 2 + GRID_COLUMN_GAP) return 2;
+  return 1;
 }
 
 export function renderCenteredWelcome(
   resources: WelcomeResources | undefined,
   theme: Theme,
   width: number,
+  notice?: string,
 ): string[] {
   if (width <= 0) return [];
-  const useWideLayout =
-    resources !== undefined && width >= MIN_WIDE_LAYOUT_WIDTH;
-  const layoutWidth = useWideLayout
-    ? Math.min(MAX_WIDE_LAYOUT_WIDTH, width)
-    : Math.min(MAX_STACKED_COLUMN_WIDTH, width);
+  const columnCount = resources ? getGridColumnCount(width) : 1;
+  const columnWidth =
+    columnCount === 1
+      ? Math.min(MAX_STACKED_COLUMN_WIDTH, width)
+      : Math.min(
+          MAX_GRID_COLUMN_WIDTH,
+          Math.floor(
+            (width - GRID_COLUMN_GAP * (columnCount - 1)) / columnCount,
+          ),
+        );
+  const layoutWidth =
+    columnWidth * columnCount + GRID_COLUMN_GAP * (columnCount - 1);
   const leftPadding = " ".repeat(Math.floor((width - layoutWidth) / 2));
   const lines =
-    useWideLayout && resources
-      ? renderWideWelcome(resources, theme, layoutWidth)
-      : renderStackedWelcome(resources, theme, layoutWidth);
+    columnCount !== 1 && resources
+      ? renderGridWelcome(resources, theme, columnWidth, columnCount)
+      : renderStackedWelcome(resources, theme, layoutWidth, notice);
 
   return lines.map((line) =>
     line ? leftPadding + truncateToWidth(line, layoutWidth, "") : "",
@@ -735,6 +972,7 @@ export function renderCenteredWelcome(
 class WelcomeHeader implements Component {
   private resourceReadyTimer: ReturnType<typeof setTimeout> | undefined;
   private resources: WelcomeResources | undefined;
+  private notice: string | undefined;
   private cachedWidth: number | undefined;
   private cachedLines: string[] | undefined;
   private disposed = false;
@@ -758,7 +996,10 @@ class WelcomeHeader implements Component {
   ): void {
     if (this.disposed) return;
     if (!this.bridge) {
+      // The TUI layout matched no known shape. Say so in the header instead
+      // of degrading silently; this is how Pi layout changes get noticed.
       this.resourceReadyTimer = undefined;
+      this.notice = LAYOUT_NOTICE;
       if (attempt === 0) this.tui.requestRender(forceInitialRender);
       return;
     }
@@ -767,10 +1008,12 @@ class WelcomeHeader implements Component {
     try {
       snapshot = inspectResourcePanel(this.bridge.panel);
     } catch {
-      this.showNativePanel(forceInitialRender);
+      this.showNativePanel(forceInitialRender, LAYOUT_NOTICE);
       return;
     }
     if (snapshot.requiresNativePanel) {
+      // Expected fallback for diagnostics and unknown-but-valid sections:
+      // Pi's panel is preserved intact, so stay silent.
       this.showNativePanel(forceInitialRender);
       return;
     }
@@ -807,12 +1050,15 @@ class WelcomeHeader implements Component {
         RESOURCE_POLL_INTERVAL_MS,
       );
     } else {
-      this.showNativePanel(false);
+      // A still-empty panel means quiet startup or slow resource loading;
+      // warn only when sections loaded but never became parseable.
+      this.showNativePanel(false, resourceText ? LAYOUT_NOTICE : undefined);
     }
   }
 
-  private showNativePanel(forceRender: boolean): void {
+  private showNativePanel(forceRender: boolean, notice?: string): void {
     this.resourceReadyTimer = undefined;
+    this.notice = notice;
     restoreResourcePanel(this.tui, this.bridge);
     this.clearRenderCache();
     this.tui.requestRender(forceRender);
@@ -829,7 +1075,12 @@ class WelcomeHeader implements Component {
     }
 
     const resources = this.resources;
-    const lines = renderCenteredWelcome(resources, this.theme, width);
+    const lines = renderCenteredWelcome(
+      resources,
+      this.theme,
+      width,
+      this.notice,
+    );
     if (resources) {
       this.cachedWidth = width;
       this.cachedLines = lines;

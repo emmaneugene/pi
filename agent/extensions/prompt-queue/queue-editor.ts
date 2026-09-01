@@ -26,9 +26,11 @@ export type QueueEditorHooks = {
 
 /**
  * Prompt editor that reroutes submissions while the agent is busy:
- * enter captures a queued follow-up, tab captures a steering message, and
- * up (on an empty editor) or alt+up opens the queue manager. Slash and bash
- * commands always fall through to Pi's built-in handling.
+ * - enter captures a queued follow-up.
+ * - tab captures a steering message.
+ * - up (on an empty editor) or alt+up opens the queue manager.
+ *
+ * Slash and bash commands always fall through to Pi's built-in handling.
  */
 export class QueuePromptEditor extends CustomEditor {
   private readonly hooks: QueueEditorHooks;

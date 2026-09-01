@@ -3,6 +3,7 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { detectGitBranch } from "../../lib/git-branch.ts";
 
 export interface EnvInfo {
   isGitRepo: boolean;
@@ -10,23 +11,15 @@ export interface EnvInfo {
   platform: string;
 }
 
-/** Detect git status + platform via pi.exec (never throws). */
+/** Detect git status + platform (never throws). */
 export async function detectEnv(
   pi: ExtensionAPI,
   cwd: string,
 ): Promise<EnvInfo> {
-  let isGitRepo = false;
-  let branch = "";
-  try {
-    const r = await pi.exec("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-      cwd,
-    });
-    if (r.code === 0) {
-      isGitRepo = true;
-      branch = r.stdout.trim();
-    }
-  } catch {
-    // not a git repo, or git unavailable — fine
-  }
-  return { isGitRepo, branch, platform: process.platform };
+  const git = await detectGitBranch(pi, cwd);
+  return {
+    isGitRepo: git.isRepo,
+    branch: git.branch ?? "",
+    platform: process.platform,
+  };
 }

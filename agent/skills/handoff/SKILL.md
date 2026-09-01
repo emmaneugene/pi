@@ -1,7 +1,6 @@
 ---
 name: handoff
 description: "Create a durable handoff document that captures current context, decisions, touched files, current state, and the next task, copied to the clipboard by default. Use when wrapping up work, pausing a thread, or preparing someone (or a future session) to continue."
-disable-model-invocation: false
 ---
 
 # Handoff

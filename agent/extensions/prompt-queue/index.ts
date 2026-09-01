@@ -65,9 +65,7 @@ class PromptQueueRuntime {
 
   enqueue(text: string, mode: QueueItemMode): void {
     this.queue.add(text, mode);
-    this.gate.held = false;
-    this.deliverNextWhenIdle();
-    this.updateWidget();
+    this.resumeDelivery();
   }
 
   onTurnEnd(message: unknown): void {
@@ -160,6 +158,10 @@ class PromptQueueRuntime {
   }
 
   resume(): void {
+    this.resumeDelivery();
+  }
+
+  private resumeDelivery(): void {
     this.gate.held = false;
     this.deliverNextWhenIdle();
     this.updateWidget();

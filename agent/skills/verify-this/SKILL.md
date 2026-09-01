@@ -1,7 +1,6 @@
 ---
 name: verify-this
 description: Verify a behavioral, UI, CLI, API, performance, or memory claim with fresh local evidence. Use when asked to verify, prove a fix works, compare before and after, or show evidence beyond passing tests.
-disable-model-invocation: false
 source: https://github.com/cursor/plugins/tree/main/cursor-team-kit/skills/verify-this
 ---
 

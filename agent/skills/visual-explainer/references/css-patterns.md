@@ -564,221 +564,28 @@ Add zoom controls to every `.mermaid-wrap` container for complex diagrams.
 
 **Small diagrams in slides.** If a diagram has fewer than ~7 nodes with no branching, it will render tiny in a full-viewport slide container. For simple linear flows (A → B → C → D), use CSS pipeline cards instead of Mermaid — see `slide-patterns.md` "CSS Pipeline Slide." Reserve Mermaid for complex graphs where automatic edge routing is actually needed.
 
-### Full Pattern
+### Canonical interactive pattern
 
-```css
-.mermaid-wrap {
-  position: relative;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 32px 24px;
-  overflow: auto;
-  /* CRITICAL: center the diagram both horizontally and vertically */
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  /* Prevent vertical flowcharts from compressing into unreadable thumbnails */
-  min-height: 400px;
-}
+Use `templates/mermaid-flowchart.html` as the source for `diagram-shell` HTML, CSS, and JavaScript. Do not copy a partial implementation from this reference. The template owns:
 
-/* For shorter diagrams that don't need the full height */
-.mermaid-wrap--compact {
-  min-height: 200px;
-}
+- per-diagram state without hardcoded IDs;
+- zoom, pan, fit, 1:1, and expand controls;
+- wheel, pointer, touch, and double-click interactions;
+- adaptive sizing and readability floors;
+- shared drag state and error handling.
 
-/* For very tall vertical flowcharts */
-.mermaid-wrap--tall {
-  min-height: 600px;
-}
+Each diagram uses this structure:
 
-.zoom-controls {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: flex;
-  gap: 2px;
-  z-index: 10;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 2px;
-}
-
-.zoom-controls button {
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-  font-size: 14px;
-  cursor: pointer;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
-}
-
-.zoom-controls button:hover {
-  background: var(--border);
-  color: var(--text);
-}
-
-.mermaid-wrap {
-  cursor: grab;
-}
-.mermaid-wrap.is-panning {
-  cursor: grabbing;
-  user-select: none;
-}
-
-/* Multi-diagram structure */
-.diagram-shell {
-  position: relative;
-}
-
-.diagram-shell__hint {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-bottom: 8px;
-  opacity: 0.7;
-}
-
-.mermaid-viewport {
-  position: relative;
-  overflow: hidden;
-  width: 100%;
-  height: 100%;
-  min-height: 300px;
-}
-
-.mermaid-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
-.zoom-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-dim);
-  padding: 0 6px;
-  white-space: nowrap;
-}
+```text
+.diagram-shell
+  .mermaid-wrap
+    .zoom-controls
+    .mermaid-viewport
+      .mermaid.mermaid-canvas
+  script.diagram-source[type="text/plain"]
 ```
 
-**How the new zoom/pan engine works:**
-
-The SVG is rendered into `.mermaid-canvas` which is absolutely positioned inside `.mermaid-viewport`. Zooming sets the SVG's `width` and `height` styles directly. Panning applies `transform: translate()` to the canvas. The viewport has `overflow: hidden` to clip the panned content. This approach avoids CSS `zoom` (which had cross-browser quirks) and gives precise control over the diagram's size and position.
-
-### HTML
-
-```html
-<section class="diagram-shell">
-  <p class="diagram-shell__hint">
-    Ctrl/Cmd + wheel to zoom. Scroll to pan. Drag to pan when zoomed.
-    Double-click to fit.
-  </p>
-  <div class="mermaid-wrap">
-    <div class="zoom-controls">
-      <button type="button" data-action="zoom-in" title="Zoom in">+</button>
-      <button type="button" data-action="zoom-out" title="Zoom out">
-        &minus;
-      </button>
-      <button type="button" data-action="zoom-fit" title="Smart fit">
-        &#8634;
-      </button>
-      <button type="button" data-action="zoom-one" title="1:1 zoom">1:1</button>
-      <button type="button" data-action="zoom-expand" title="Open full size">
-        &#x26F6;
-      </button>
-      <span class="zoom-label">Loading...</span>
-    </div>
-    <div class="mermaid-viewport">
-      <div class="mermaid mermaid-canvas"></div>
-    </div>
-  </div>
-  <script type="text/plain" class="diagram-source">
-    graph TD
-      A --> B
-  </script>
-</section>
-```
-
-Use one `.diagram-shell` per diagram. The source Mermaid text lives in `<script type="text/plain" class="diagram-source">`, so multiple diagrams can coexist on a page without ID collisions.
-
-### JavaScript
-
-Use a closure-based initializer. Per-diagram state lives inside `initDiagram(shell)`, while shared drag listeners stay at module scope:
-
-```javascript
-const config = {/* fitPadding, zoom bounds, readabilityFloor */};
-const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
-let activeDrag = null;
-
-addEventListener("mousemove", (e) => activeDrag?.onMove(e));
-addEventListener("mouseup", () => {
-  activeDrag?.onEnd();
-  activeDrag = null;
-});
-
-function initDiagram(shell) {
-  const wrap = shell.querySelector(".mermaid-wrap");
-  const viewport = shell.querySelector(".mermaid-viewport");
-  const canvas = shell.querySelector(".mermaid-canvas");
-  const source = shell.querySelector(".diagram-source");
-  const label = shell.querySelector(".zoom-label");
-
-  if (!wrap || !viewport || !canvas || !source || !label) {
-    console.error("initDiagram: missing required elements in", shell);
-    return;
-  }
-
-  // Per-diagram state in closure
-  let zoom = 1;
-  let fitMode = "contain";
-  let panX = 0;
-  let panY = 0;
-  let svgW = 0;
-  let svgH = 0;
-
-  async function render() {
-    try {
-      const code = source.textContent.trim();
-      if (!code) {
-        label.textContent = "Error: Empty source";
-        return;
-      }
-
-      const id =
-        "diagram-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-      const { svg } = await mermaid.render(id, code);
-      const parsed = new DOMParser().parseFromString(svg, "text/html");
-      const parsedSvg = parsed.body.querySelector("svg");
-      if (!parsedSvg) throw new Error("Mermaid produced no SVG");
-      canvas.replaceChildren(document.adoptNode(parsedSvg));
-
-      // readSvgNaturalSize(svgNode) + setAdaptiveHeight() + fitDiagram()
-      // wire controls from data-action attributes
-      // wire wheel/drag/touch handlers scoped to this shell
-    } catch (err) {
-      console.error("Mermaid render failed:", err);
-      label.textContent = "Error: " + (err.message || "Render failed");
-    }
-  }
-
-  render();
-}
-
-document.querySelectorAll(".diagram-shell").forEach(initDiagram);
-```
-
-This pattern removes all hardcoded IDs and supports unlimited diagrams per page. For the full implementation (including smart fit, pinch zoom, and shared drag state), use `templates/mermaid-flowchart.html` as the canonical source.
+Page-specific CSS may size `.mermaid-wrap`, but it must not replace the template's interaction engine or force `width: 100% !important` on the generated SVG.
 
 ### Mermaid SVG insertion
 

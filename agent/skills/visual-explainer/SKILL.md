@@ -1,123 +1,58 @@
 ---
 name: visual-explainer
 description: Generate self-contained HTML visual explanations for systems, code changes, plans, data, and technical concepts. Use for diagrams, architecture overviews, diff or plan reviews, project recaps, comparison tables, slide decks, and other visual explanations.
-disable-model-invocation: false
-source: https://github.com/nicobailon/visual-explainer/blob/main/plugins/visual-explainer
 ---
 
 # Visual Explainer
 
-Generate self-contained HTML pages that explain systems, code changes, plans, data, and technical concepts visually. Use this skill for diagram requests, architecture overviews, diff/plan reviews, project recaps, comparison tables, slide decks, and any visual explanation.
+Produce a self-contained HTML page that makes one thing genuinely understood. You own the structure: pick the sections, diagram language, and depth that fit the content. This skill supplies the quality bar, the house design language, and the few building blocks that are hard to get right — not a page recipe.
 
-**Boundary**: This skill produces static explanatory documents (interactivity limited to zoom/pan, collapsibles, slide nav). If the user needs a real app - state management, routing, forms, editable data - use the `web-app-builder` skill instead.
+**Boundary**: static explanatory documents (interactivity limited to zoom/pan, collapsibles, quiz reveals, slide nav). If the user needs a real app — state management, routing, forms, editable data — use the `web-app-builder` skill instead.
 
-## Reference routing
+## Interactive vs pipeline use
 
-Read only the references needed for the current output:
+**Interactive session (a person asked for an explainer): interview, then build iteratively. Do not one-shot.**
 
-| Need                                                                                                                  | Read                                                                                                   |
-| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Narrative explainer of a change/system (Background → Intuition → Walkthrough → Quiz), scrollspy TOC, interactive quiz | `./templates/explainer-page.html`                                                                      |
-| Text-heavy architecture/cards                                                                                         | `./templates/architecture.html`                                                                        |
-| Mermaid flowcharts, sequence, ER, state, class, C4, data flow                                                         | `./templates/mermaid-flowchart.html`, Mermaid sections in `./references/libraries.md`                  |
-| Data tables, comparisons, audits                                                                                      | `./templates/data-table.html`                                                                          |
-| Slide decks                                                                                                           | `./templates/slide-deck.html`, `./references/slide-patterns.md`                                        |
-| CSS layout, overflow, depth, collapsibles, SVG connectors                                                             | `./references/css-patterns.md`                                                                         |
-| Before/after diffs, bespoke non-Mermaid diagrams (cross-section, mass, call-graph collapse, hand-built boxes)         | "Before / After Panels" and "Bespoke (non-Mermaid) Diagram Patterns" in `./references/css-patterns.md` |
-| Pages with 4+ major sections                                                                                          | `./references/responsive-nav.md`                                                                       |
-| Prose-heavy pages                                                                                                     | “Prose Page Elements” in `css-patterns.md`, typography sections in `libraries.md`                      |
+1. **Interview first.** Ask 2–3 questions before writing anything: who reads this and what do they already know; what specifically is confusing or what decision the page must support; overview or deep walkthrough. Skip only what the conversation already answered.
+2. **Skeleton before flesh.** Deliver a thin version first — title, section outline, one representative diagram, the core example you intend to trace through. Ask what's missing or wrong.
+3. **Build out on feedback.** Deepen the sections that matter to the reader; cut the ones that don't. Repeat until the reader says it lands.
 
-## Choose the representation
+**Pipeline artifact (subagent output, journey runbook, unattended generation): one-shot is correct.** Apply the same quality bar; skip the interview.
 
-| Content                                                                                       | Default representation                                       |
-| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Flowchart, pipeline, state machine, decision tree                                             | Mermaid                                                      |
-| Sequence, ER/schema, class, C4, topology-focused architecture                                 | Mermaid                                                      |
-| Text-heavy architecture, module internals, implementation plans                               | CSS grid cards, optionally with a Mermaid overview           |
-| 15+ element architecture                                                                      | Hybrid: small Mermaid overview + CSS detail cards            |
-| Before/after, diff, migration, review (deep-dive teaching a diff/PR: use explainer-page mode) | Two-column before/after panels (diff-colored headers)        |
-| UI change                                                                                     | Simplified hand-built UI mockup (HTML/CSS), before/after     |
-| Editorial weight: shallowness, mass, layering, collapse                                       | Bespoke hand-built `<div>` + inline-SVG diagram, not Mermaid |
-| Comparison/audit/status matrix                                                                | Semantic HTML `<table>`                                      |
-| Timeline/roadmap                                                                              | CSS timeline                                                 |
-| Dashboard/metrics (static snapshot; if user must manipulate data, use `web-app-builder`)      | CSS grid + charts/KPIs                                       |
-| Slide deck                                                                                    | `100dvh` slides using slide template patterns                |
+## Quality bar
 
-## Mermaid invariants
+These three properties are what make an explainer worth reading. Check each before delivery.
 
-- Use `theme: 'base'` with custom `themeVariables` matching the page palette.
-- For complex diagrams use ELK layout when available.
-- Never use bare `<pre class="mermaid">`.
-- Use the canonical `diagram-shell` pattern from `templates/mermaid-flowchart.html`: `.diagram-shell` > `.mermaid-wrap` > `.zoom-controls` + `.mermaid-viewport` > `.mermaid-canvas`.
-- Every Mermaid diagram needs zoom in/out/fit/1:1/expand controls, Ctrl/Cmd+scroll zoom, drag panning, and double-click-to-fit. The expand control opens the diagram full-size in a new tab.
-- Prefer `flowchart TD` for complex diagrams. Use `LR` only for simple 3–4 node linear flows.
-- Use `<br/>` in quoted flowchart labels. Do not use escaped `\n` labels.
-- Never define page-level `.node`; Mermaid uses it internally. Use namespaced page classes such as `.ve-card`.
-- For 15+ elements, do not cram everything into one Mermaid diagram. Use the hybrid overview + cards pattern.
-- Mermaid is the default for graph-shaped content, but do not route everything through it — it starts to look generic. For weight/mass/layering visuals, hand-build with `<div>`s + inline SVG (see `css-patterns.md`).
+1. **Real walkthroughs with concrete examples.** Trace actual-looking data through the system end to end — a named campaign, a real-shaped SQL row, a specific request payload — not labeled boxes and abstract nouns. Pick one or two worked examples early and reuse them across every section so the reader follows a single thread. Diagrams show the example values flowing, not just component names.
+2. **Well-labeled diagrams that map structure cleanly.** Data flows, hierarchies, and interface boundaries each get a diagram whose every node, edge, and boundary is labeled with what it _is_ and what _crosses_ it. If a diagram needs a paragraph to be understood, redraw the diagram. Split anything with 15+ elements into an overview plus detail views.
+3. **Narrative a five-year-old could follow.** Simple, connected writing: each section states plainly what the reader now knows and why the next section follows. Apply the `ste-prose` skill to the prose — one meaning per word, active voice, short sentences. Define every term at first use or link it to a definition. No section may depend on knowledge the page hasn't built yet.
 
-## Card anatomy
+A quiz (4–6 medium-difficulty multiple-choice questions with click-to-reveal answers) is a good closer for teaching-oriented pages — answerable only if the reader understood the substance, no gotchas.
 
-When content is rendered as CSS cards (architecture, plans, reviews), keep each card structurally disciplined:
+## Design language
 
-- **Title** — short, names the thing; no filler.
-- **Optional badge row** — status/strength (e.g. emerald = strong, amber = worth exploring, slate = speculative) and/or a category tag.
-- **Optional file/meta line** — monospaced, small.
-- **Body** — the diagram or content carries the weight; prose is sparse. If a diagram needs a paragraph to be understood, redraw the diagram.
-- **Wins/takeaways** — short bullets, not paragraphs.
-- **Optional callout** — one tinted line for an ADR/warning/note.
+Keep one consistent visual identity across explainers so a reader moving between pages never re-learns the vocabulary:
 
-For before/after reviews, the two-column diff is the centerpiece of the card, not an afterthought.
+- **Cool-slate, light by default**: grey `#f6f7f9` page, white surfaces, navy `#10192b` text, teal-led jewel-tone accents (amber/blue/red/green for states). Dark or adaptive theming only on request.
+- Depth via borders, surface contrast, and spacing — plain backgrounds, restrained shadows, no texture or gradient atmosphere.
+- One display typeface for headings with strong size contrast, one mono face for code and meta lines, always with fallbacks.
+- Exact tokens live in `./references/css-patterns.md` (Theme Setup); the diagram shell template already applies them.
 
-## Explainer-page mode (teaching a change or system)
+Within that identity, vary layout and composition freely to serve the content.
 
-When the goal is understanding — explaining a diff, PR, or unfamiliar system in depth — structure the page as a narrative, not a card grid. Start from `./templates/explainer-page.html` (paper/blueprint palette; sticky scrollspy TOC, collapsible primer, interactive trace diagram, before/after panels, and a JS-driven quiz already wired):
+## Building blocks
 
-- **Sections**: Background → Intuition → Walkthrough → Quiz, with a table of contents. One long scrollable page; no top-level tabs.
-- **Background**: broad primer for beginners inside a collapsible `<details>` (skippable), then the narrow context directly relevant to the change. Explore surrounding code first.
-- **Intuition**: the essence, not the details. Concrete toy-data examples; diagrams carry the weight.
-- **Walkthrough**: changes grouped and ordered for comprehension, not file order. Use before/after panels inside the narrative.
-- **Quiz**: 4–6 interactive multiple-choice questions, medium difficulty — answerable only if the reader understood the substance, no gotchas. Clicking reveals correct/incorrect plus a one-line explanation.
-- **Diagram families**: pick 1–3 diagram vocabularies early (e.g. simplified UI mockup for UI changes, data-flow/system diagram) and reuse them across sections with varying data. Do not invent a new visual language per section.
-- **Diagrams show example data**, not just labeled boxes: real-looking values flowing through the system.
-- **Prose breathes here**, unlike card pages: clear, flowing, classic style with smooth transitions. Use `.prose` patterns from `css-patterns.md` and callouts for definitions and edge cases.
+- **Single self-contained file.** Inline CSS/JS; CDN links only for libraries (Mermaid, Chart.js, Google Fonts — always with font fallbacks).
+- **Semantic HTML** for tables, headings, lists, `<details>`, and captions. Long pages get a table of contents; make a skippable `<details>` primer for background the expert reader already has.
+- **Mermaid diagram shell.** Never emit a bare `<pre class="mermaid">`. Start complex diagrams from `./templates/mermaid-flowchart.html` — it wires zoom, pan, fit, 1:1, and expand controls. Use `theme: 'base'` with page-matched variables; quoted labels with `<br/>` (never `\n`); never define a page-level `.node` CSS class (Mermaid uses it).
+- Other files under `./templates/` and `./references/` are legacy reference material — consult them only when stuck on a specific mechanism (slide chrome, responsive nav, bespoke SVG diagrams), not as required reading or page recipes.
+- **Hand-built HTML/inline-SVG diagrams** when the point is visual weight, layering, or mass rather than graph structure — Mermaid can't do editorial emphasis.
+- **Slides on request only**: one `100dvh` viewport per slide, visible prev/next + keyboard nav, and no dropped content to hit a slide count.
 
-## Layout and style invariants
+## Hard-won gotchas
 
-- Use semantic HTML where it helps accessibility and copy/paste: `<table>`, headings, lists, `<details>`, captions.
-- Use CSS custom properties for palette: `--bg`, `--surface`, `--border`, `--text`, `--text-dim`, and 3–5 accents.
-- Default to the unified cool-slate palette: a **plain `--bg` (`#f6f7f9`)**, white `--surface`, navy `--text` (`#10192b`), slate `--text-dim` (`#5b6472`), low-alpha cool borders, and muted jewel-tone accents led by teal `#0f766e` (plus amber `#b45309`, blue `#1d4ed8`, red `#b91c1c`, green `#15803d`). The grey page against white surfaces gives cards definition without gradients. Full token set in `references/css-patterns.md` Theme Setup. Do not emit a `@media (prefers-color-scheme: dark)` override, OS-adaptive auto-switching, or `isDark` detection by default. Add a dark or adaptive theme only when the user explicitly asks; when you do, keep light as the `:root` default and layer dark on top.
-- Pick a clear aesthetic direction before writing: blueprint, editorial, paper/ink, terminal, IDE-inspired, or data-dense.
-- Keep backgrounds plain: a flat cool-slate page (`#f6f7f9`) with white surfaces, no gradient glows, dot grids, or gradient-mesh blobs. Create depth with the grey/white contrast plus borders, spacing, and subtle shadows on surfaces, not background decoration. A gradient is fine only when functional (e.g. a scrim over a photo for legibility). Simplicity and readability come first.
-- Avoid generic defaults: no body font that is only Inter, Roboto, Arial, Helvetica, or system-ui; no violet/fuchsia Tailwind-default accents as the main palette (`#8b5cf6`, `#7c3aed`, `#a78bfa`, `#d946ef`); no cyan+magenta+purple neon dashboard.
-- Good font pair families: DM Sans + Fira Code; Instrument Serif + JetBrains Mono; IBM Plex Sans + IBM Plex Mono; Bricolage Grotesque + Fragment Mono; Plus Jakarta Sans + Azeret Mono.
-- Good accent directions: terracotta+sage, teal+slate, rose+cranberry, amber+emerald, deep blue+gold.
-- Prevent overflow: `min-width: 0` on grid/flex children, `overflow-wrap: break-word` for long text, and scroll containers for wide tables/code.
-- Do not set `display: flex` directly on `<li>` when list markers matter.
-- Use depth sparingly: hero/elevated only for primary sections; flat/recessed for reference material.
-- Use entrance/hover animation only when it clarifies hierarchy. Respect `prefers-reduced-motion`. Do not use continuous glow, pulse, or breathing effects on static content.
-
-## Slide deck mode
-
-Use slides only when explicitly requested or when a command asks for slides. Slides are a different medium, not a paginated article:
-
-- Each slide is one viewport (`100dvh`) with no page-level scrolling.
-- Use larger type, fewer objects per slide, varied compositions, and visible navigation.
-- Include slide nav chrome from `slide-deck.html`: prev/next controls, slide count, keyboard navigation, and carousel dots/indicators.
-- Before writing HTML, inventory the source and map every source item to slides.
-- Do not drop content to fit a fixed slide count. Add slides instead.
-- Use the 10 slide types from `slide-patterns.md`: Title, Section Divider, Content, Split, Diagram, Dashboard, Table, Code, Quote, Full-Bleed.
-
-## Final checklist
-
-Before delivery, verify:
-
-- complete HTML document;
-- output written to the requested path;
-- no console errors when opened;
-- no horizontal overflow at normal desktop width;
-- fonts load with fallbacks;
-- tables preserve rows/columns and wrap long text;
-- Mermaid diagrams use `diagram-shell` with zoom/pan/expand;
-- slides fit one viewport, include carousel dots, and preserve source coverage;
-- visual hierarchy makes the main idea obvious in the first viewport;
+- Code blocks: `white-space: pre-wrap; overflow-wrap: break-word;` or long lines silently overflow.
+- Global overflow guard: `overflow-x: hidden` on body plus `min-width: 0` on grid/flex children; check at normal desktop width before delivery.
+- Never `display: flex` on `<li>` — it destroys list markers. Custom-numbered lists need explicit counters.
+- Wrap animations in `@media (prefers-reduced-motion: no-preference)`; animate only to clarify state or hierarchy.
+- Verify the delivered file opens with no console errors and the main idea is visible in the first viewport.

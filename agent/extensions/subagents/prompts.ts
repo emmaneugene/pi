@@ -3,9 +3,10 @@
  *
  * Two modes:
  *   replace — env header + the agent's own instructions (full control).
- *   append  — parent system prompt verbatim FIRST (so the child shares an
- *             identical, cacheable byte-prefix with the parent — KV-cache
- *             reuse), then a sub-agent bridge, env header, instructions.
+ *   append  — parent system prompt verbatim first, then a sub-agent bridge,
+ *             env header, and instructions. Sending the parent prompt first
+ *             gives the child an identical, cacheable byte-prefix, for
+ *             KV-cache reuse.
  *
  * Both carry an <active_agent name="..."/> tag so other extensions can resolve
  * per-agent policy by parsing the child's system prompt if they ever want to.

@@ -1,9 +1,9 @@
 /**
  * Desktop notification engine.
  *
- * Sends a native desktop notification via the single delivery mechanism the
- * current terminal supports. Each terminal maps to exactly ONE mechanism, so a
- * notification never fires twice.
+ * Sends a native desktop notification through the one delivery mechanism the
+ * current terminal supports. Each terminal maps to exactly ONE mechanism, so
+ * a notification never fires twice.
  *
  *   OSC 99  -> kitty                                  (title + body)
  *   OSC 9   -> iTerm2, Rio                            (body only)

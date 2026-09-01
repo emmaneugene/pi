@@ -1,8 +1,7 @@
 ---
 description: General-purpose agent for researching complex questions, searching code, and executing multi-step tasks.
 display_name: General
-tools: read, write, edit, bash, mcp
-model: openai-codex/gpt-5.5
+model: openai-codex/gpt-5.6-sol
 thinking: medium
 prompt_mode: append
 ---

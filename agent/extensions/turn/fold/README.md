@@ -2,7 +2,7 @@
 
 This extension vendors [`@onurpi/turn-fold`](https://github.com/osolmaz/onurpi/tree/4fd56fb5c91e3d555dfe329abfcdc8df2a761ee5/packages/turn-fold) at commit `4fd56fb5c91e3d555dfe329abfcdc8df2a761ee5`, retrieved 2026-07-29. Its Pi 0.84.3 compaction-replay fix is synced from upstream commit [`0c230a4`](https://github.com/osolmaz/onurpi/commit/0c230a488bcc9f1bdc3817652975a536de629769). The upstream repository does not declare a license, so this copy must remain private.
 
-The vendored snapshot includes the runtime modules, behavior specification, transcript-window design, and Vitest suite. Local adaptations move tests into `test/`, use the repository's shared dependencies and test runner, and check the package through `agent/tsconfig.check.json`. Non-TUI sessions skip Turn Fold, and nested transcript components retain Pi's native rendering. The sibling `diff/` module owns change summaries, so the `turn` composition root (`../index.ts`) mounts Turn Fold with `showEditDiffs: false` and its upstream edit diffstats stay disabled.
+The vendored snapshot includes the runtime modules, behavior specification, transcript-window design, and Vitest suite. Local adaptations move tests into `test/`, use the repository's shared dependencies and test runner, and check the package through `agent/tsconfig.check.json`. Non-TUI sessions skip Turn Fold, and nested transcript components retain Pi's native rendering. The sibling `diff/` module owns change summaries, so the upstream edit diffstats are removed from this copy.
 
 Compact transcript rendering for the Pi coding agent.
 
@@ -91,7 +91,7 @@ Run the shared checks from `agent/`:
 
 ```bash
 npm run typecheck
-npm run test:turn-fold
+npm test   # from ~/.pi/agent
 ```
 
 Upstream-only coverage, Slophammer, and mutation dependencies are not vendored.

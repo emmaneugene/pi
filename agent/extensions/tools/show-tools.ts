@@ -55,7 +55,11 @@ const toEntry = (tool: ToolInfo, active: boolean): CatalogEntry => {
       label: tool.name,
       description: `(${sourceLabel(tool)}) ${mark}  ${oneLine}`,
     },
-    artifact: () => ({ content: toolDoc(tool, active), ext: ".md" }),
+    artifact: () => ({
+      kind: "text",
+      content: toolDoc(tool, active),
+      ext: ".md",
+    }),
   };
 };
 

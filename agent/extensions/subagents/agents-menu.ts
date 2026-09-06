@@ -40,6 +40,7 @@ function ageOf(ms: number): string {
 /** The session-history artefact for a transcript file (rendered, read-only). */
 function transcriptArtifact(file?: string): CatalogEntry["artifact"] {
   return () => ({
+    kind: "text",
     content: file ? renderTranscriptText(file) : "(no transcript yet)",
     ext: ".txt",
   });
@@ -101,8 +102,8 @@ function gatherEntries(
 
 /** Resolve one catalog row to a viewable source, live record or stored file. */
 function sourceFor(
-  ctx: ExtensionContext,
   manager: SubagentManager,
+  disk: ReadonlyMap<string, DiskTranscript>,
   value: string,
 ): TranscriptSource | undefined {
   const record = manager.getRecord(value);
@@ -111,7 +112,7 @@ function sourceFor(
     return sourceForRecord(record, manager);
   }
 
-  const transcript = diskTranscripts(ctx).find((d) => d.file === value);
+  const transcript = disk.get(value);
   if (!transcript) return undefined;
   const title = transcript.invocation
     ? `${transcript.invocation.type} · ${transcript.invocation.description}`
@@ -123,13 +124,14 @@ function sourceFor(
 async function openSessionViewer(
   ctx: ExtensionContext,
   manager: SubagentManager,
+  disk: ReadonlyMap<string, DiskTranscript>,
   entries: CatalogEntry[],
   value: string,
 ): Promise<void> {
   const order = entries.map((entry) => entry.item.value);
   let index = Math.max(0, order.indexOf(value));
   for (;;) {
-    const source = sourceFor(ctx, manager, order[index] ?? value);
+    const source = sourceFor(manager, disk, order[index] ?? value);
     if (!source) {
       ctx.ui.notify("Subagent transcript is no longer available.", "warning");
       return;
@@ -148,11 +150,12 @@ export async function showSessionSubagents(
   // Disk-only rows are immutable while this picker is open. Cache them so the
   // live refresh only rebuilds labels from cheap in-memory agent records.
   const disk = diskTranscripts(ctx);
+  const diskByFile = new Map(disk.map((d) => [d.file, d]));
   const entries = () => gatherEntries(manager, disk);
   await showCatalog(ctx, "Subagents", entries, {
     refreshIntervalMs: 500,
     onSelect: (entry) =>
-      openSessionViewer(ctx, manager, entries(), entry.item.value),
+      openSessionViewer(ctx, manager, diskByFile, entries(), entry.item.value),
     // ctrl+x stops the highlighted subagent if it's still running.
     onKill: (value) => {
       const rec = manager.getRecord(value);

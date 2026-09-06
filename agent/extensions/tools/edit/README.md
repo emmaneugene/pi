@@ -49,7 +49,7 @@ The one unavoidable duplication is reading the file to plan a `replaceAll`, whic
 ## Tests
 
 ```
-npm run test:tools
+npm test   # from ~/.pi/agent
 ```
 
 `test/replace.test.ts` covers the matching logic; `test/tool.test.ts` drives the registered tool against real files, including the delegated path; `test/regression.test.ts` holds cases from review — concurrent edits to one file, trailing-whitespace paths, and whitespace-insensitive duplicate locating.

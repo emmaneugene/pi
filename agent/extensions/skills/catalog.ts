@@ -1,5 +1,4 @@
 import { type ExtensionAPI, type Skill } from "@earendil-works/pi-coding-agent";
-import { readFileSync } from "node:fs";
 import { showCatalog, type CatalogEntry } from "../../lib/tui/picker.ts";
 
 const sourceOf = (skill: Skill): string =>
@@ -18,11 +17,7 @@ const toEntry = (skill: Skill): CatalogEntry => {
       description: `(${sourceOf(skill)}) ${mark}  ${oneLine}`,
     },
     // The artefact is the full SKILL.md.
-    artifact: () => ({
-      path: skill.filePath,
-      content: readFileSync(skill.filePath, "utf-8"),
-      ext: ".md",
-    }),
+    artifact: () => ({ kind: "file", path: skill.filePath }),
   };
 };
 

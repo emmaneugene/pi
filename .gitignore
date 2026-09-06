@@ -3,6 +3,7 @@ agent/mcp-oauth/
 agent/sessions/
 agent/auth.json
 agent/cursor-sdk*.json
+!agent/cursor-sdk.json
 agent/mcp*.json
 agent/models-store.json
 agent/run-history.jsonl

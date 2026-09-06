@@ -1,5 +1,3 @@
-import { resolve } from "node:path";
-
 import {
   AssistantMessageComponent,
   CompactionSummaryMessageComponent,
@@ -262,64 +260,6 @@ it("renders local user and completion times in transcript order", () => {
   expect(rendered.indexOf("Worked for")).toBeLessThan(rendered.indexOf("Final response"));
   expect(rendered.indexOf("Final response")).toBeLessThan(rendered.indexOf("08:06"));
   expect(rendered).not.toContain("Ctrl+Shift+O");
-});
-
-it("renders per-file diffstats beside paths only in compact summaries", () => {
-  const workingDirectory = resolve("/workspace/project");
-  const expectedPath = resolve(workingDirectory, "src/example.ts");
-  const state = new TurnFoldState(workingDirectory);
-  const transcript = new Container();
-  restore = installRenderPatches(state, () => undefined);
-  const toolCaller = assistantMessage(110, [
-    {
-      arguments: { edits: [{ newText: "new", oldText: "old" }], path: "src/example.ts" },
-      id: "edit-live",
-      name: "edit",
-      type: "toolCall",
-    },
-  ]);
-  const final = assistantMessage(140, [{ text: "Final response", type: "text" }]);
-  const editResult = {
-    content: [{ text: "edited", type: "text" as const }],
-    details: {
-      patch: [
-        "--- src/example.ts",
-        "+++ src/example.ts",
-        "@@ -1,1 +1,2 @@",
-        "-old",
-        "+new",
-        "+added",
-        "",
-      ].join("\n"),
-    },
-    isError: false,
-    role: "toolResult" as const,
-    timestamp: 130,
-    toolCallId: "edit-live",
-    toolName: "edit",
-  };
-
-  state.loadHistory([
-    { message: { content: "Prompt", role: "user", timestamp: 100 }, type: "message" },
-    { message: toolCaller, type: "message" },
-    { message: editResult, type: "message" },
-    { message: final, timestamp: new Date(150).toISOString(), type: "message" },
-  ]);
-  transcript.addChild(new UserMessageComponent("Prompt", undefined, 0));
-  transcript.addChild(new AssistantMessageComponent(toolCaller, false, undefined, undefined, 0));
-  transcript.addChild(new AssistantMessageComponent(final, false, undefined, undefined, 0));
-
-  const compact = frame(transcript);
-  expect(compact).toContain("1 file +2 −1");
-  const fileLine = compact.split("\n").find((line) => line.includes(expectedPath));
-  expect(fileLine).toContain("+2 −1");
-  expect(visibleWidth(fileLine ?? "")).toBeLessThanOrEqual(120);
-  expect(compact.indexOf("1 file +2 −1")).toBeLessThan(compact.indexOf(expectedPath));
-  expect(compact.indexOf(expectedPath)).toBeLessThan(compact.indexOf("Final response"));
-  state.setMode("expanded");
-  const expanded = frame(transcript);
-  expect(expanded).not.toContain("1 file +2 −1");
-  expect(expanded).not.toContain(expectedPath);
 });
 
 it("timestamps every visible user and assistant message in both modes", () => {

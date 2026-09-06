@@ -1,23 +1,16 @@
 {
   "name": "pi-agent-local",
   "private": true,
+  "type": "module",
   "scripts": {
     "typecheck": "tsc -p tsconfig.check.json",
-    "test": "npm run test:all",
-    "test:all": "npm run test:lib && npm run test:tools && npm run test:prompt-queue && npm run test:session && npm run test:subagents && npm run test:turn-fold && npm run test:node",
-    "test:node": "node --experimental-strip-types --test extensions/notify/test/notify.test.ts extensions/pi-session-search/test/helpers.test.ts extensions/pi-session-search/test/integration.test.ts extensions/skills/test/skill-audit.test.ts extensions/turn/diff/test/file-tracker.test.ts extensions/mermaid-fit/test/index.test.ts",
-    "test:lib": "vitest run --config lib/vitest.config.ts",
-    "test:tools": "vitest run --config extensions/tools/bash/vitest.config.ts && vitest run --config extensions/tools/edit/vitest.config.ts && vitest run --config extensions/tools/ask-user-question/vitest.config.ts",
-    "bump-pi-deps": "npm install --save-exact @earendil-works/pi-ai@$(pi --version) @earendil-works/pi-coding-agent@$(pi --version) @earendil-works/pi-tui@$(pi --version)",
-    "test:prompt-queue": "vitest run --config extensions/prompt-queue/vitest.config.ts",
-    "test:session": "vitest run --config extensions/session/vitest.config.ts",
-    "test:subagents": "vitest run --config extensions/subagents/vitest.config.ts",
-    "test:turn-fold": "vitest run --config extensions/turn/fold/vitest.config.ts"
+    "test": "vitest run",
+    "check-pi": "scripts/check-pi.sh"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "0.84.1",
-    "@earendil-works/pi-coding-agent": "0.84.1",
-    "@earendil-works/pi-tui": "0.84.1",
+    "@earendil-works/pi-ai": "0.85.1",
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@earendil-works/pi-tui": "0.85.1",
     "grok-mermaid": "0.2.2",
     "typebox": "1.3.7"
   },

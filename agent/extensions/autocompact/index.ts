@@ -5,6 +5,7 @@ import {
   type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { readJsonFile } from "../../lib/json-state.ts";
+import { notify, setStatus } from "./ui.ts";
 
 /**
  * Trigger compaction once context usage crosses the configured percentage or
@@ -13,9 +14,11 @@ import { readJsonFile } from "../../lib/json-state.ts";
  * This extension supports percentage and absolute-token thresholds. When both
  * apply, the lower token limit wins. It compacts only after the agent settles,
  * so compaction does not abort an active run or its attached asynchronous work.
+ * Cursor provider models bypass this extension because pi-cursor-sdk manages
+ * their agent runtime and does not support Pi's manual compaction flow.
  *
- * Keep Pi's built-in auto-compaction enabled for context-overflow recovery.
- * Manual compaction stays available and is the mechanism this extension uses.
+ * Disable Pi's built-in auto-compaction. Manual compaction stays available and
+ * is the mechanism this extension uses after completed runs.
  *
  * Configure via ~/.pi/agent/autocompact.json:
  * {
@@ -122,6 +125,10 @@ function resolveSettings(
   config: Config,
   ctx: ExtensionContext,
 ): ThresholdSettings {
+  if (ctx.model?.provider === "cursor") {
+    return { ...config, enabled: false };
+  }
+
   const modelRef = ctx.model
     ? `${ctx.model.provider}/${ctx.model.id}`
     : undefined;
@@ -169,18 +176,6 @@ function configuredThresholdLabel(settings: ThresholdSettings): string {
 
 function usageLabel(usage: ContextUsage): string {
   return `${usage.tokens.toLocaleString()} tokens (${Math.round(usage.percent)}%)`;
-}
-
-function setStatus(ctx: ExtensionContext, text: string | undefined): void {
-  if (ctx.hasUI) ctx.ui.setStatus("autocompact", text);
-}
-
-function notify(
-  ctx: ExtensionContext,
-  message: string,
-  type: "info" | "warning" | "error" = "info",
-): void {
-  if (ctx.hasUI) ctx.ui.notify(message, type);
 }
 
 type CompactionState =
@@ -271,25 +266,9 @@ export default function (pi: ExtensionAPI) {
     ctx.compact({
       onComplete: () => {
         // Pi reports null usage until the first post-compaction assistant
-        // response. Default to "attempted" so that response can still verify
-        // the new context size; the checks below refine it when usage is
-        // already known.
+        // response, so the next agent_settled verifies the new context size.
         state = { kind: "attempted" };
         notify(ctx, "Compaction complete.", "info");
-
-        const postCompactUsage = contextUsage(ctx.getContextUsage());
-        if (postCompactUsage) {
-          const postCompactSettings = resolveSettings(config, ctx);
-          const postCompactThreshold = effectiveThreshold(
-            postCompactUsage,
-            postCompactSettings,
-          );
-          if (postCompactUsage.tokens >= postCompactThreshold.tokens) {
-            warnTerminateSession(ctx, postCompactUsage, postCompactSettings);
-          } else {
-            state = { kind: "ready" };
-          }
-        }
       },
       onError: (error) => {
         state = { kind: "ready" };

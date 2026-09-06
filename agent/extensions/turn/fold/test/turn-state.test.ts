@@ -1,10 +1,6 @@
-import { resolve } from "node:path";
-
 import { describe, expect, it, vi } from "vitest";
 
 import { TurnFoldState } from "../turn-state.ts";
-
-const TEST_WORKING_DIRECTORY = resolve("/workspace/project");
 
 function assistantMessage(
   timestamp: number,
@@ -52,35 +48,6 @@ function compactionAssociation(
 
 function compactionMessage(timestamp: number): Record<string, unknown> {
   return { role: "compactionSummary", summary: "summary", timestamp, tokensBefore: 10_000 };
-}
-
-function editToolResult(
-  toolCallId: string,
-  path: string,
-  additions: number,
-  deletions: number,
-  isError = false,
-): Record<string, unknown> {
-  const removed = Array.from({ length: deletions }, (_, index) => `-old ${String(index)}`);
-  const added = Array.from({ length: additions }, (_, index) => `+new ${String(index)}`);
-  return {
-    content: [{ text: isError ? "failed" : "edited", type: "text" }],
-    details: {
-      patch: [
-        `--- ${path}`,
-        `+++ ${path}`,
-        `@@ -1,${String(deletions)} +1,${String(additions)} @@`,
-        ...removed,
-        ...added,
-        "",
-      ].join("\n"),
-    },
-    isError,
-    role: "toolResult",
-    timestamp: 120,
-    toolCallId,
-    toolName: "edit",
-  };
 }
 
 describe("compact streaming", () => {
@@ -241,109 +208,6 @@ describe("compact streaming", () => {
   });
 });
 
-describe("edit diffstats", () => {
-  it("aggregates successful edit operations by tool call and unique absolute file", () => {
-    const state = new TurnFoldState(TEST_WORKING_DIRECTORY);
-    const final = {};
-    const message = assistantMessage(180, [{ text: "Done", type: "text" }]);
-
-    state.ensureActive(100);
-    for (const toolCallId of ["edit-1", "edit-2", "edit-3"]) {
-      state.registerToolStart(toolCallId, 110);
-    }
-    const first = editToolResult("edit-1", "src/a.ts", 2, 1);
-    state.registerToolResult(first);
-    state.registerToolResult(first);
-    state.registerToolResult(editToolResult("edit-2", "src/a.ts", 1, 2));
-    state.registerToolResult(editToolResult("edit-3", "src/b.ts", 0, 3));
-    registerAssistant(state, final, message);
-    state.settleActive(200);
-
-    expect(state.viewFor(final, 200)?.summary.fileDiff).toEqual({
-      additions: 3,
-      deletions: 6,
-      fileDiffs: [
-        {
-          additions: 3,
-          deletions: 3,
-          path: resolve(TEST_WORKING_DIRECTORY, "src/a.ts"),
-        },
-        {
-          additions: 0,
-          deletions: 3,
-          path: resolve(TEST_WORKING_DIRECTORY, "src/b.ts"),
-        },
-      ],
-      files: 2,
-    });
-  });
-
-  it("ignores failed, malformed, and non-edit tool results", () => {
-    const state = new TurnFoldState();
-    const final = {};
-    const message = assistantMessage(180, [{ text: "Done", type: "text" }]);
-
-    state.ensureActive(100);
-    state.registerToolStart("failed", 110);
-    state.registerToolResult(editToolResult("failed", "src/a.ts", 1, 1, true));
-    state.registerToolStart("malformed", 120);
-    state.registerToolResult({
-      ...editToolResult("malformed", "src/a.ts", 1, 1),
-      details: { patch: "not a patch" },
-    });
-    state.registerToolStart("read", 130);
-    state.registerToolResult({
-      ...editToolResult("read", "src/a.ts", 1, 1),
-      toolName: "read",
-    });
-    registerAssistant(state, final, message);
-    state.settleActive(200);
-
-    expect(state.viewFor(final, 200)?.summary.fileDiff).toBeUndefined();
-  });
-
-  it("reconstructs the same diffstat and paths from historical tool results", () => {
-    const state = new TurnFoldState(TEST_WORKING_DIRECTORY);
-    const final = {};
-    const finalMessage = assistantMessage(180, [{ text: "Done", type: "text" }]);
-
-    state.loadHistory([
-      { message: { content: "prompt", role: "user", timestamp: 100 }, type: "message" },
-      {
-        message: assistantMessage(110, [
-          { id: "history-a", name: "edit", type: "toolCall" },
-          { id: "history-b", name: "edit", type: "toolCall" },
-        ]),
-        type: "message",
-      },
-      { message: editToolResult("history-a", "src/a.ts", 4, 2), type: "message" },
-      { message: editToolResult("history-b", "src/b.ts", 1, 3), type: "message" },
-      { message: finalMessage, timestamp: new Date(200).toISOString(), type: "message" },
-    ]);
-    state.associateAssistant(final, finalMessage);
-
-    expect(state.viewFor(final, 200)?.summary.fileDiff).toEqual({
-      additions: 5,
-      deletions: 5,
-      fileDiffs: [
-        {
-          additions: 4,
-          deletions: 2,
-          path: resolve(TEST_WORKING_DIRECTORY, "src/a.ts"),
-        },
-        {
-          additions: 1,
-          deletions: 3,
-          path: resolve(TEST_WORKING_DIRECTORY, "src/b.ts"),
-        },
-      ],
-      files: 2,
-    });
-    state.setMode("expanded");
-    expect(state.viewFor(final, 200)?.display).toBe("original");
-  });
-});
-
 describe("compact settled turns", () => {
   it("hides all intermediate activity and keeps the last assistant message", () => {
     const state = new TurnFoldState();
@@ -379,6 +243,25 @@ describe("compact settled turns", () => {
         tools: 1,
       },
     });
+  });
+
+  it("does not add an assistant component owned by another turn", () => {
+    const state = new TurnFoldState();
+    const shared = {};
+    const current = {};
+
+    state.ensureActive(100);
+    registerAssistant(state, shared, assistantMessage(110, [{ text: "First", type: "text" }]));
+    state.settleActive(120);
+
+    state.ensureActive(200);
+    registerAssistant(state, current, assistantMessage(210, [{ text: "Second", type: "text" }]));
+    const third = assistantMessage(220, [{ text: "Third", type: "text" }]);
+    state.registerAssistantMessage(third);
+    state.associateAssistant(shared, third);
+    state.settleActive(230);
+
+    expect(state.viewFor(current)?.display).toBe("settled-summary-final");
   });
 
   it("keeps an interrupted assistant message visible", () => {
@@ -790,11 +673,17 @@ describe("historical transcript timing and reload", () => {
       { text: "Active", type: "text" },
       { id: "edit-reload", name: "edit", type: "toolCall" },
     ]);
-    const editResult = editToolResult("edit-reload", "src/reload.ts", 2, 1);
+    const editResult = {
+      content: [{ text: "edited", type: "text" }],
+      isError: false,
+      role: "toolResult",
+      timestamp: 120,
+      toolCallId: "edit-reload",
+      toolName: "edit",
+    };
 
     state.ensureActive(100);
     registerAssistant(state, original, message);
-    state.registerToolResult(editResult);
     state.deferHistoryReload(() => [
       { message: { content: "prompt", role: "user", timestamp: 100 }, type: "message" },
       { message, type: "message" },
@@ -806,10 +695,7 @@ describe("historical transcript timing and reload", () => {
     expect(state.viewFor(original)).toBeUndefined();
     expect(state.viewFor(rebuilt)?.display).toBe("original");
     state.settleActive(120);
-    expect(state.viewFor(rebuilt)).toMatchObject({
-      display: "settled-summary-final",
-      summary: { fileDiff: { additions: 2, deletions: 1, files: 1 } },
-    });
+    expect(state.viewFor(rebuilt)?.display).toBe("settled-summary-final");
   });
 
   it("keeps historical and active turns separate after a wider reload", () => {

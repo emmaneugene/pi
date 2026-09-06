@@ -60,16 +60,12 @@ const SONNET = {
   reasoning: true,
 } as unknown as Model<any>;
 
-/** A ctx whose registry offers exactly one model, for provenance assertions. */
+/** A ctx whose session scope offers exactly one model, for provenance assertions. */
 function ctxWith(agentConfig: Partial<AgentConfig>) {
   const modelCtx = {
     model: SONNET,
+    scopedModels: [{ model: SONNET }],
     cwd: "/tmp",
-    modelRegistry: {
-      getAvailable: () => [SONNET],
-      find: (provider: string, id: string) =>
-        provider === SONNET.provider && id === SONNET.id ? SONNET : undefined,
-    },
   } as unknown as ExtensionContext;
   const agentRegistry = {
     resolve: () => ({ ...config, ...agentConfig }),
@@ -186,7 +182,11 @@ describe("SubagentManager asynchronous scheduling", () => {
   });
 
   it("does not start a child whose parent signal is already aborted", () => {
-    const runner: ChildRunner = async () => completed();
+    let runs = 0;
+    const runner: ChildRunner = async () => {
+      runs++;
+      return completed();
+    };
     const manager = new SubagentManager(registry, 1, {}, runner);
     const parent = new AbortController();
     parent.abort();
@@ -200,7 +200,7 @@ describe("SubagentManager asynchronous scheduling", () => {
     );
 
     expect(manager.getRecord(id)?.status).toBe("stopped");
-    expect(manager.getRecord(id)?.promise).toBeUndefined();
+    expect(runs).toBe(0);
   });
 });
 
@@ -258,6 +258,29 @@ describe("SubagentManager blocking spawns", () => {
     manager.abort(queued);
 
     // Queued records have no run promise; the waiter must not hang on one.
+    await expect(settled).resolves.toMatchObject({ status: "stopped" });
+  });
+
+  it("keeps the settled record for a waiter when a later discard follows", async () => {
+    const first = deferred<RunResult>();
+    const manager = new SubagentManager(
+      registry,
+      1,
+      {},
+      async (_ctx, _config, prompt) =>
+        prompt === "first" ? first.promise : completed(),
+    );
+    manager.spawn(pi, ctx, "test", "first", options());
+    const queued = manager.spawn(pi, ctx, "test", "second", {
+      ...options(),
+      awaitResult: true,
+    });
+    const settled = manager.whenSettled(queued);
+
+    manager.abort(queued);
+    manager.abortAndDiscardAll();
+
+    // The first settlement wins: the abort wrote a final state before the discard.
     await expect(settled).resolves.toMatchObject({ status: "stopped" });
   });
 

@@ -3,23 +3,14 @@ import type { PromptQueue, QueueItemMode } from "./queue-model.ts";
 
 export type ManagerTab = "queue" | "history";
 
-export type WindowTarget =
-  { kind: "queue"; id: number } | { kind: "history"; index: number };
-
-export type WindowEntry = {
-  target: WindowTarget;
-  text: string;
-  mode?: QueueItemMode;
-};
-
-export type WindowRow =
-  | { kind: "empty"; label: string }
-  | { kind: "entry"; entry: WindowEntry; selected: boolean };
+export type WindowEntry =
+  | { kind: "queue"; id: number; text: string; mode: QueueItemMode }
+  | { kind: "history"; index: number; text: string };
 
 export type ManagerResult =
   | { kind: "close" }
   | { kind: "resume" }
-  | { kind: "edit"; target: WindowTarget; text: string }
+  | { kind: "edit"; entry: WindowEntry; text: string }
   | { kind: "insert"; text: string };
 
 /** Visible slice of a list that keeps the selected index on screen. */
@@ -76,29 +67,24 @@ export class ManagerWindowState {
   entries(): WindowEntry[] {
     if (this.tab === "queue") {
       return this.queue.items().map((item): WindowEntry => ({
-        target: { kind: "queue", id: item.id },
+        kind: "queue",
+        id: item.id,
         text: item.text,
         mode: item.mode,
       }));
     }
     return this.history.entries().map((text, index): WindowEntry => ({
-      target: { kind: "history", index },
+      kind: "history",
+      index,
       text,
     }));
   }
 
-  rows(): WindowRow[] {
+  /** Entries of the active tab with the cursor clamped into range. */
+  view(): { entries: WindowEntry[]; selected: number } {
     const entries = this.entries();
     this.clampCursor(entries.length);
-    if (entries.length === 0) {
-      const label = this.tab === "queue" ? "nothing queued" : "no prompts yet";
-      return [{ kind: "empty", label }];
-    }
-    return entries.map((entry, index) => ({
-      kind: "entry",
-      entry,
-      selected: index === this.cursor,
-    }));
+    return { entries, selected: this.cursor };
   }
 
   moveCursor(delta: number): boolean {
@@ -120,23 +106,22 @@ export class ManagerWindowState {
   deleteSelected(): boolean {
     const entry = this.selection();
     if (!entry) return false;
-    if (entry.target.kind === "history")
-      return this.history.removeAt(entry.target.index);
-    this.queue.remove(entry.target.id);
+    if (entry.kind === "history") return this.history.removeAt(entry.index);
+    this.queue.remove(entry.id);
     if (this.queue.size === 0) this.setTab("history");
     return true;
   }
 
   toggleSelectedMode(): boolean {
     const entry = this.selection();
-    if (entry?.target.kind !== "queue") return false;
-    return this.queue.toggleMode(entry.target.id);
+    if (entry?.kind !== "queue") return false;
+    return this.queue.toggleMode(entry.id);
   }
 
   moveSelected(direction: -1 | 1): boolean {
     const entry = this.selection();
-    if (entry?.target.kind !== "queue") return false;
-    if (!this.queue.move(entry.target.id, direction)) return false;
+    if (entry?.kind !== "queue") return false;
+    if (!this.queue.move(entry.id, direction)) return false;
     this.cursor += direction;
     return true;
   }
@@ -145,7 +130,7 @@ export class ManagerWindowState {
   takeForInsert(): string | undefined {
     const entry = this.selection();
     if (!entry) return undefined;
-    if (entry.target.kind === "queue") this.queue.remove(entry.target.id);
+    if (entry.kind === "queue") this.queue.remove(entry.id);
     return entry.text;
   }
 

@@ -101,7 +101,6 @@ function loadVisibleHistory(
   branch: BranchEntries,
   registry: EphemeralCompactionRegistry,
 ): void {
-  state.setWorkingDirectory(ctx.cwd);
   state.loadHistory(
     ctx.sessionManager.buildContextEntries(),
     compactionAssociationsForBranch(branch, ctx, registry),
@@ -261,11 +260,8 @@ function registerControls(
   });
 }
 
-export default function turnFold(
-  pi: ExtensionAPI,
-  options: { showEditDiffs?: boolean } = {},
-): void {
-  const state = new TurnFoldState({ showEditDiffs: options.showEditDiffs });
+export default function turnFold(pi: ExtensionAPI): void {
+  const state = new TurnFoldState();
   const compactionRegistry = processCompactionRegistry();
   let active = false;
   let adapter: TranscriptWindowAdapter | undefined;
@@ -343,11 +339,6 @@ export default function turnFold(
     if (!active) return;
     currentTheme = ctx.ui.theme;
     registerEndedAssistant(state, event.message);
-  });
-
-  pi.on("turn_end", (event) => {
-    if (!active) return;
-    for (const result of event.toolResults) state.registerToolResult(result);
   });
 
   pi.on("tool_execution_start", (event, ctx) => {

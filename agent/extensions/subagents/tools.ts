@@ -140,9 +140,9 @@ export function registerTools(
         // does not silently replace that reference with the parent model,
         // because the caller cannot correct a substitution it is never told
         // about.
-        const model = findModel(params.model, ctx.modelRegistry);
+        const model = findModel(params.model, ctx.scopedModels);
         if (params.model && !model) {
-          const suggestions = suggestModels(params.model, ctx.modelRegistry);
+          const suggestions = suggestModels(params.model, ctx.scopedModels);
           return textResult(
             `Unknown model "${params.model}". ${
               suggestions.length > 0

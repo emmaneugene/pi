@@ -59,8 +59,8 @@ function parseInvocation(value: unknown): SubagentInvocation | undefined {
   };
 }
 
-/** Read display metadata, inferring what is available in older transcripts. */
-function transcriptSummary(file: string): {
+/** Display metadata from transcript lines, inferring what older transcripts lack. */
+function transcriptSummary(lines: readonly string[]): {
   task: string;
   invocation?: SubagentInvocation;
   turns: number;
@@ -72,7 +72,7 @@ function transcriptSummary(file: string): {
   let model = "";
   let thinking = "";
   try {
-    for (const line of readFileSync(file, "utf-8").split("\n")) {
+    for (const line of lines) {
       if (!line.trim()) continue;
       const e = JSON.parse(line);
       if (e.type === "message" && e.message?.role === "assistant") turns++;
@@ -143,17 +143,18 @@ export function listSubagentTranscripts(
   }
   for (const f of files) {
     const file = join(dir, f);
+    let lines: string[];
     let header: Record<string, unknown> | undefined;
     let mtime = 0;
     try {
-      const first = readFileSync(file, "utf-8").split("\n", 1)[0];
-      header = JSON.parse(first);
+      lines = readFileSync(file, "utf-8").split("\n");
+      header = JSON.parse(lines[0]!);
       mtime = Date.parse(String(header?.timestamp ?? "")) || 0;
     } catch {
       continue;
     }
     if (!header || header.type !== "session") continue;
-    const summary = transcriptSummary(file);
+    const summary = transcriptSummary(lines);
     out.push({
       id: String(header.id ?? basename(f, ".jsonl")),
       file,

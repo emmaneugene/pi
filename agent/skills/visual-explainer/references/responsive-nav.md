@@ -1,10 +1,10 @@
 # Responsive Section Navigation
 
-Navigation pattern for multi-section pages (reviews, recaps, dashboards). Provides a sticky sidebar TOC on desktop and a sticky horizontal scrollable bar on mobile.
+Navigation for multi-section pages (reviews, recaps, dashboards): a sticky sidebar TOC on desktop, a sticky horizontal scroll bar on mobile.
 
 ## Layout Structure
 
-The page uses a two-column CSS Grid: sidebar (TOC) + main content. On mobile it collapses to single-column with the TOC becoming a horizontal bar.
+Two-column CSS Grid: sidebar (TOC) + main content. On mobile it collapses to single-column with the TOC becoming a horizontal bar.
 
 ```html
 <body>
@@ -32,13 +32,7 @@ The page uses a two-column CSS Grid: sidebar (TOC) + main content. On mobile it 
 </body>
 ```
 
-Key structural rules:
-
-- `<nav class="toc">` is the **first child** of `.wrap`
-- All page content goes inside `<div class="main">`
-- Every section heading gets an `id="s1"`, `id="s2"`, etc.
-- TOC links use `href="#s1"` matching those IDs
-- Keep TOC link text short (truncate long section names)
+Key structural rules: `<nav class="toc">` is the **first child** of `.wrap`; all content goes inside `<div class="main">`; every section heading gets `id="s1"`, `id="s2"`, etc. matching the TOC `href="#s1"` links; keep TOC link text short.
 
 ## CSS
 
@@ -111,7 +105,7 @@ Key structural rules:
 }
 ```
 
-Replace `var(--accent)` with your page's primary accent color variable (e.g., `var(--orange)`, `var(--blue)`).
+Replace `var(--accent)` with the page's primary accent variable.
 
 ### TOC — Mobile (sticky horizontal bar)
 
@@ -176,7 +170,7 @@ Replace `var(--accent)` with your page's primary accent color variable (e.g., `v
 }
 ```
 
-Adjust `margin: 0 -40px` and `padding-left/right: 40px` to match your `body` padding so the bar bleeds edge-to-edge.
+Match `margin: 0 -40px` and `padding-left/right: 40px` to the page's `body` padding so the bar bleeds edge-to-edge.
 
 ## JavaScript — Scroll Spy
 
@@ -237,8 +231,4 @@ Place before `</body>`, after any Mermaid init:
 
 ## Adaptation Notes
 
-- The `.toc-title` text, link labels, accent color, and section IDs change per page. Everything else is copy-paste.
-- For pages with fewer than 4 sections, skip the TOC entirely — it adds clutter without value.
-- The `grid-template-columns: 170px 1fr` width works for most TOCs. If section names are longer, go up to `200px`.
-- The `rootMargin: '-10% 0px -80% 0px'` means a section is "active" when its heading enters the top 10-20% of the viewport. This works well with sticky headers.
-- On mobile, the horizontal bar uses `overflow-x: auto` with hidden scrollbar. The active tab auto-scrolls into the center of the bar as the user scrolls the page.
+`.toc-title` text, link labels, accent color, and section IDs change per page; everything else is copy-paste. Skip the TOC below 4 sections. `grid-template-columns: 170px 1fr` fits most TOCs; go up to `200px` for longer section names. `rootMargin: '-10% 0px -80% 0px'` marks a section active when its heading enters the top 10–20% of the viewport. On mobile, the active tab auto-scrolls to center as the page scrolls.

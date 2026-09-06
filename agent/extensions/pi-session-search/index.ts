@@ -124,6 +124,25 @@ export function getRoot(): string {
   return process.env.PI_SESSION_SEARCH_ROOT || DEFAULT_ROOT;
 }
 
+/** The sessions root with symlinks resolved, so containment checks compare real paths. */
+async function resolveRootPath(root: string): Promise<string> {
+  try {
+    return await realpath(root);
+  } catch {
+    return path.resolve(root);
+  }
+}
+
+/**
+ * Whether a resolved path is the root or lives under it. The separator guard
+ * keeps a sibling such as `/root-evil` from passing as `/root`.
+ */
+export function isContained(resolvedRoot: string, resolved: string): boolean {
+  return (
+    resolved === resolvedRoot || resolved.startsWith(resolvedRoot + path.sep)
+  );
+}
+
 function getPositiveEnvInt(name: string, fallback: number): number {
   const value = Number.parseInt(process.env[name] || "", 10);
   return Number.isFinite(value) && value > 0 ? value : fallback;
@@ -321,12 +340,7 @@ export async function searchSessions(
   // containment check we already do in read_session to every subdirectory we
   // walk. This stops a symlinked entry inside the sessions root from
   // silently widening the search to arbitrary parts of the filesystem.
-  let resolvedRoot: string;
-  try {
-    resolvedRoot = await realpath(root);
-  } catch {
-    resolvedRoot = path.resolve(root);
-  }
+  const resolvedRoot = await resolveRootPath(root);
 
   let dirs: Array<{ name: string; isDirectory: () => boolean }>;
   try {
@@ -358,10 +372,7 @@ export async function searchSessions(
     } catch {
       continue;
     }
-    if (
-      !resolvedSubdir.startsWith(resolvedRoot + path.sep) &&
-      resolvedSubdir !== resolvedRoot
-    ) {
+    if (!isContained(resolvedRoot, resolvedSubdir)) {
       skippedFiles += 1;
       continue;
     }
@@ -386,10 +397,7 @@ export async function searchSessions(
       } catch {
         continue;
       }
-      if (
-        !resolvedFile.startsWith(resolvedRoot + path.sep) &&
-        resolvedFile !== resolvedRoot
-      ) {
+      if (!isContained(resolvedRoot, resolvedFile)) {
         skippedFiles += 1;
         continue;
       }
@@ -630,22 +638,14 @@ export async function readSessionWindow(opts: {
   const candidate = path.isAbsolute(opts.sessionFile)
     ? opts.sessionFile
     : path.join(root, opts.sessionFile);
-  let resolvedRoot: string;
+  const resolvedRoot = await resolveRootPath(root);
   let resolvedFile: string;
-  try {
-    resolvedRoot = await realpath(root);
-  } catch {
-    resolvedRoot = path.resolve(root);
-  }
   try {
     resolvedFile = await realpath(candidate);
   } catch {
     resolvedFile = path.resolve(candidate);
   }
-  if (
-    !resolvedFile.startsWith(resolvedRoot + path.sep) &&
-    resolvedFile !== resolvedRoot
-  ) {
+  if (!isContained(resolvedRoot, resolvedFile)) {
     throw new Error(`Refusing to read outside session root: ${resolvedRoot}`);
   }
 

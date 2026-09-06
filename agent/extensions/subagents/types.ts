@@ -157,7 +157,6 @@ export interface AgentRecord {
   completedAt?: number;
   session?: AgentSession;
   abortController?: AbortController;
-  promise?: Promise<string>;
   /** Messages that enter as steers before the initial prompt starts. */
   pendingSteers?: string[];
   lifetimeUsage: LifetimeUsage;
@@ -166,11 +165,11 @@ export interface AgentRecord {
   /** The most recently started tool call that is still active. */
   activeTool?: { name: string; detail?: string };
   /**
-   * Resolves once the record's final state (status, result, stopReason) is
-   * written: finishAgent for a run settlement, directly for a queued record
-   * aborted or discarded without starting.
+   * Resolves with the record once its final state (status, result, stopReason)
+   * is written, or with undefined if the record was discarded first.
    */
-  settled?: Promise<void>;
+  settled: Promise<AgentRecord | undefined>;
+  settle: (result: AgentRecord | undefined) => void;
   /** Whether the user has seen this failure. */
   widgetAcknowledged?: boolean;
   /** Whether the user stopped this agent. */

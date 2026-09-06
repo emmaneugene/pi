@@ -1,0 +1,10 @@
+{
+  "bridge": {
+    "excludeTools": [
+      "subagent",
+      "get_subagent_result",
+      "inspect_subagent",
+      "steer_subagent"
+    ]
+  }
+}

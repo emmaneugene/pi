@@ -12,6 +12,8 @@ When rules pull in different directions, use this order:
 4. Avoid broad migrations unless explicitly requested.
 5. Document meaningful trade-offs with comments or ADRs.
 
+When work includes both a fix and a refactor, choose the order that keeps the fix straightforward. If refactoring would make the fix harder, complete the fix first.
+
 Before adding a new pattern or library, inspect the repo for existing choices around error handling, schema parsing, dependency injection, testing, observability, adapters, and module layout. If existing code uses exception-style errors, do not rewrite the whole system: new code may use typed results internally, but it must integrate with the existing framework handlers, logging, tracing, and error reporting. At boundaries, translate between local typed errors and whatever the framework expects. Do not force a whole-project migration for an unrelated change.
 
 ## Core principles

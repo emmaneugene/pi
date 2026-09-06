@@ -11,7 +11,7 @@ import {
   type ManagerResult,
   type ManagerWindowState,
   viewportSlice,
-  type WindowRow,
+  type WindowEntry,
 } from "./window-state.ts";
 
 const MAX_VISIBLE_ROWS = 14;
@@ -67,8 +67,7 @@ export class ManagerWindow {
 
   private finishEdit(): void {
     const entry = this.state.selection();
-    if (entry)
-      this.done({ kind: "edit", target: entry.target, text: entry.text });
+    if (entry) this.done({ kind: "edit", entry, text: entry.text });
   }
 
   render(width: number): string[] {
@@ -100,37 +99,47 @@ export class ManagerWindow {
   }
 
   private rowLines(width: number): string[] {
-    const rows = this.state.rows();
-    const selectedIndex = rows.findIndex(
-      (row) => row.kind === "entry" && row.selected,
-    );
+    const { entries, selected } = this.state.view();
+    if (entries.length === 0) {
+      const label =
+        this.state.activeTab() === "queue"
+          ? "nothing queued"
+          : "no prompts yet";
+      return [truncateToWidth(this.theme.fg("dim", `   (${label})`), width)];
+    }
     const { start, end } = viewportSlice(
-      rows.length,
-      Math.max(selectedIndex, 0),
+      entries.length,
+      selected,
       MAX_VISIBLE_ROWS,
     );
-    const lines = rows.slice(start, end).map((row) => this.rowLine(row, width));
+    const lines = entries
+      .slice(start, end)
+      .map((entry, i) => this.rowLine(entry, start + i === selected, width));
     if (start > 0)
       lines.unshift(this.theme.fg("dim", ` ↑ ${String(start)} more`));
-    if (end < rows.length)
-      lines.push(this.theme.fg("dim", ` ↓ ${String(rows.length - end)} more`));
+    if (end < entries.length)
+      lines.push(
+        this.theme.fg("dim", ` ↓ ${String(entries.length - end)} more`),
+      );
     return lines;
   }
 
-  private rowLine(row: WindowRow, width: number): string {
+  private rowLine(
+    entry: WindowEntry,
+    selected: boolean,
+    width: number,
+  ): string {
     const theme = this.theme;
-    if (row.kind === "empty")
-      return truncateToWidth(theme.fg("dim", `   (${row.label})`), width);
-    const pointer = row.selected ? theme.fg("accent", " ▸ ") : "   ";
+    const pointer = selected ? theme.fg("accent", " ▸ ") : "   ";
     const mode =
-      row.entry.mode === undefined
+      entry.kind === "history"
         ? ""
-        : row.entry.mode === "steer"
+        : entry.mode === "steer"
           ? theme.fg("warning", "[steer] ")
           : theme.fg("accent", "[queued] ");
-    const text = row.selected
-      ? theme.fg("accent", previewText(row.entry.text))
-      : previewText(row.entry.text);
+    const text = selected
+      ? theme.fg("accent", previewText(entry.text))
+      : previewText(entry.text);
     return truncateToWidth(pointer + mode + text, width);
   }
 

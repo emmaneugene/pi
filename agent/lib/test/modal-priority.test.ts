@@ -95,7 +95,7 @@ describe("ModalPriority", () => {
     const catalog = showCatalog(ctx, "Things", [
       {
         item: { label: "one", value: "one" },
-        artifact: () => ({ content: "one" }),
+        artifact: () => ({ kind: "text", content: "one" }),
       },
     ]);
     await mounted.promise;

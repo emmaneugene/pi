@@ -9,7 +9,6 @@
  */
 
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { readFileSync } from "node:fs";
 import { type CatalogEntry, showCatalog } from "../../lib/tui/picker.ts";
 import { BUILTIN_TOOLS } from "./gating.ts";
 import type { AgentRegistry } from "./registry.ts";
@@ -44,11 +43,7 @@ function toEntry(c: AgentConfig): CatalogEntry {
       description: `${mark} ${context} · ${tools} · ${model} · ${thinking} · ${c.promptMode}`,
     },
     // The artefact is the full agent .md definition file.
-    artifact: () => ({
-      path: c.filePath,
-      content: readFileSync(c.filePath, "utf-8"),
-      ext: ".md",
-    }),
+    artifact: () => ({ kind: "file", path: c.filePath }),
   };
 }
 

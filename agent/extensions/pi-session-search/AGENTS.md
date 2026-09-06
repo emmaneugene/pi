@@ -17,10 +17,11 @@ Adobe-internal dependencies, no servers, no network calls.
 
 ## Build / test / typecheck
 
+From `~/.pi/agent`:
+
 ```bash
-npm install        # if node_modules is missing
-npm test           # runs unit + integration tests (currently 47 tests)
-npm run typecheck  # tsc --noEmit against tsconfig.check.json
+npm test           # vitest, includes this extension's unit + integration tests
+npm run typecheck  # tsc --noEmit over every extension
 ```
 
 `npm test` must stay green on every PR. Don't merge red.
@@ -31,10 +32,7 @@ npm run typecheck  # tsc --noEmit against tsconfig.check.json
   (`@mariozechner/jiti`), **not** Node's native `--experimental-strip-types`.
   So the published package's `engines.node` must mirror the host CLI
   (`@earendil-works/pi-coding-agent`, currently `>=20.6.0`), **not** the Node
-  version the `npm test` script happens to need. Do not bump `engines.node`
-  to 22.x just because the test script passes `--experimental-strip-types`;
-  that flag is a dev/test-only concern and is irrelevant to how the shipped
-  extension is loaded at runtime.
+  version the test runner happens to need.
 - pi has first-class npm support: `pi install npm:@adobe/pi-session-search`
   is the primary install path. Keep the published tarball loadable as-is
   (no build step) — ship the `.ts` sources, not compiled JS.

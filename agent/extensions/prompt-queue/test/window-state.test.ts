@@ -71,53 +71,44 @@ describe("ManagerWindowState", () => {
   it("lists only the active tab's entries", () => {
     const state = makeState(["q1"], ["h1"]);
     expect(state.entries()).toEqual([
-      { target: { kind: "queue", id: 1 }, text: "q1", mode: "queue" },
+      { kind: "queue", id: 1, text: "q1", mode: "queue" },
     ]);
     state.toggleTab();
     expect(state.entries()).toEqual([
-      { target: { kind: "history", index: 0 }, text: "h1" },
+      { kind: "history", index: 0, text: "h1" },
     ]);
   });
 
-  it("builds the exact row list for the queue tab", () => {
+  it("views the queue tab with the cursor position", () => {
     const state = makeState(["q1", "q2"], ["h1"]);
     state.moveCursor(1);
-    expect(state.rows()).toEqual([
-      {
-        kind: "entry",
-        entry: { target: { kind: "queue", id: 1 }, text: "q1", mode: "queue" },
-        selected: false,
-      },
-      {
-        kind: "entry",
-        entry: { target: { kind: "queue", id: 2 }, text: "q2", mode: "queue" },
-        selected: true,
-      },
-    ]);
+    expect(state.view()).toEqual({
+      entries: [
+        { kind: "queue", id: 1, text: "q1", mode: "queue" },
+        { kind: "queue", id: 2, text: "q2", mode: "queue" },
+      ],
+      selected: 1,
+    });
   });
 
-  it("builds the exact row list for the history tab", () => {
+  it("views the history tab newest first", () => {
     const state = makeState([], ["h1", "h2"]);
     state.moveCursor(1);
-    expect(state.rows()).toEqual([
-      {
-        kind: "entry",
-        entry: { target: { kind: "history", index: 0 }, text: "h2" },
-        selected: false,
-      },
-      {
-        kind: "entry",
-        entry: { target: { kind: "history", index: 1 }, text: "h1" },
-        selected: true,
-      },
-    ]);
+    expect(state.view()).toEqual({
+      entries: [
+        { kind: "history", index: 0, text: "h2" },
+        { kind: "history", index: 1, text: "h1" },
+      ],
+      selected: 1,
+    });
   });
 
-  it("shows a placeholder row on an empty tab", () => {
+  it("views an empty tab with no entries", () => {
     const state = makeState([], []);
-    expect(state.rows()).toEqual([{ kind: "empty", label: "no prompts yet" }]);
+    expect(state.view()).toEqual({ entries: [], selected: 0 });
     state.setTab("queue");
-    expect(state.rows()).toEqual([{ kind: "empty", label: "nothing queued" }]);
+    expect(state.activeTab()).toBe("queue");
+    expect(state.view().entries).toEqual([]);
   });
 
   it("moves the cursor within bounds and reports changes", () => {
@@ -165,10 +156,10 @@ describe("ManagerWindowState", () => {
     const state = makeState(["q1", "q2"], []);
     state.moveCursor(1);
     expect(state.toggleSelectedMode()).toBe(true);
-    expect(state.selection()?.mode).toBe("steer");
-    expect(state.entries()[0]?.mode).toBe("queue");
+    expect(state.selection()).toMatchObject({ mode: "steer" });
+    expect(state.entries()[0]).toMatchObject({ mode: "queue" });
     expect(state.toggleSelectedMode()).toBe(true);
-    expect(state.selection()?.mode).toBe("queue");
+    expect(state.selection()).toMatchObject({ mode: "queue" });
   });
 
   it("refuses to toggle mode on the history tab or when empty", () => {

@@ -30,6 +30,15 @@ import {
 
 export type ChildRunner = typeof runChildSession;
 
+/** A record's settlement: resolves once; later calls are no-ops. */
+function deferred(): Pick<AgentRecord, "settled" | "settle"> {
+  let settle!: AgentRecord["settle"];
+  const settled = new Promise<AgentRecord | undefined>((resolve) => {
+    settle = resolve;
+  });
+  return { settled, settle };
+}
+
 export interface SubagentObservers {
   onSpawn?: (record: AgentRecord) => void;
   onComplete?: (record: AgentRecord) => void;
@@ -57,7 +66,7 @@ function resolveSpawn(
   type: SubagentType,
   options: SpawnOptions,
 ): ResolvedSpawn {
-  const definitionModel = findModel(config.model, ctx.modelRegistry);
+  const definitionModel = findModel(config.model, ctx.scopedModels);
   const model = options.model ?? definitionModel ?? ctx.model;
   const requestedThinking =
     options.thinkingLevel ??
@@ -106,8 +115,6 @@ export class SubagentManager {
   private agents = new Map<string, AgentRecord>();
   private queue: QueuedSpawn[] = [];
   private slotHolders = new Set<string>();
-  /** Resolvers for each record's settled promise, keyed by agent id. */
-  private settleResolvers = new Map<string, () => void>();
 
   constructor(
     private registry: AgentRegistry,
@@ -162,12 +169,8 @@ export class SubagentManager {
       startedAt: Date.now(),
       abortController: new AbortController(),
       lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
+      ...deferred(),
     };
-    // Resolved once the record's final state is written; a second resolve is
-    // a harmless no-op.
-    record.settled = new Promise<void>((resolve) =>
-      this.settleResolvers.set(id, resolve),
-    );
     this.agents.set(id, record);
 
     const queued: QueuedSpawn = {
@@ -216,7 +219,7 @@ export class SubagentManager {
       inheritContext: q.options.inheritContext,
       signal: record.abortController!.signal,
     };
-    record.promise = this.runChild(q.ctx, q.config, q.prompt, runOpts, {
+    void this.runChild(q.ctx, q.config, q.prompt, runOpts, {
       onTurnEnd: (turns) => {
         record.turns = turns;
       },
@@ -311,7 +314,7 @@ export class SubagentManager {
     } else {
       record.session?.dispose?.();
     }
-    this.resolveSettled(record.id);
+    record.settle(record);
     this.drainQueue();
   }
 
@@ -332,16 +335,7 @@ export class SubagentManager {
    * it was discarded (parent session switch) before settling.
    */
   whenSettled(id: string): Promise<AgentRecord | undefined> {
-    const record = this.agents.get(id);
-    if (!record?.settled) return Promise.resolve(undefined);
-    return record.settled.then(() => this.agents.get(id));
-  }
-
-  private resolveSettled(id: string): void {
-    const resolve = this.settleResolvers.get(id);
-    if (!resolve) return;
-    this.settleResolvers.delete(id);
-    resolve();
+    return this.agents.get(id)?.settled ?? Promise.resolve(undefined);
   }
 
   private isSettled(record: AgentRecord): boolean {
@@ -398,7 +392,7 @@ export class SubagentManager {
       record.status = "stopped";
       record.completedAt = Date.now();
       // Nothing else settles a queued record.
-      this.resolveSettled(id);
+      record.settle(record);
       return true;
     }
     if (record.status !== "running") return false;
@@ -416,7 +410,7 @@ export class SubagentManager {
       if (r) {
         r.status = "stopped";
         r.completedAt = Date.now();
-        this.resolveSettled(q.id);
+        r.settle(r);
       }
     }
     this.queue = [];
@@ -434,10 +428,8 @@ export class SubagentManager {
    * settling. Detached running sessions dispose themselves in finishAgent().
    */
   abortAndDiscardAll(): void {
-    // Detach resolvers so abortAll() wakes nobody; after the clear below,
-    // every waiter resolves with undefined, which reports the discard.
-    const detached = new Map(this.settleResolvers);
-    this.settleResolvers.clear();
+    // Waiters learn of the discard; later settle calls are no-ops.
+    for (const record of this.agents.values()) record.settle(undefined);
     this.abortAll();
     // Settled sessions have no later finishAgent() call to dispose them. Active
     // sessions dispose there after their abort settles.
@@ -446,7 +438,6 @@ export class SubagentManager {
     }
     this.queue = [];
     this.agents.clear();
-    for (const resolve of detached.values()) resolve();
     // Detached runs no longer consume slots in the replacement session.
     this.slotHolders.clear();
   }

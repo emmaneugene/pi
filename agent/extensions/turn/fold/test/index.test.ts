@@ -90,8 +90,8 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("Turn Fold finalized edit results", () => {
-  it("leaves change summaries to the turn-diff extension", async () => {
+describe("Turn Fold live turns", () => {
+  it("summarizes assistant messages from the extension event flow", async () => {
     const extension = extensionHarness();
     const ctx = context();
     const toolCaller = {
@@ -104,7 +104,7 @@ describe("Turn Fold finalized edit results", () => {
       role: "assistant",
       timestamp: 140,
     };
-    turnFold(extension.pi, { showEditDiffs: false });
+    turnFold(extension.pi);
 
     await emit(extension.handlers, "session_start", { type: "session_start" }, ctx);
     await emit(extension.handlers, "agent_start", { type: "agent_start" }, ctx);
@@ -116,25 +116,6 @@ describe("Turn Fold finalized edit results", () => {
     );
     await emit(extension.handlers, "message_start", { message: toolCaller }, ctx);
     await emit(extension.handlers, "message_end", { message: toolCaller }, ctx);
-    await emit(
-      extension.handlers,
-      "turn_end",
-      {
-        toolResults: [
-          {
-            details: {
-              patch:
-                "--- src/example.ts\n+++ src/example.ts\n@@ -1,1 +1,2 @@\n-old\n+new\n+added\n",
-            },
-            isError: false,
-            role: "toolResult",
-            toolCallId: "edit-final",
-            toolName: "edit",
-          },
-        ],
-      },
-      ctx,
-    );
     await emit(extension.handlers, "message_start", { message: finalMessage }, ctx);
     await emit(extension.handlers, "message_end", { message: finalMessage }, ctx);
     await emit(extension.handlers, "agent_settled", { type: "agent_settled" }, ctx);
@@ -147,7 +128,6 @@ describe("Turn Fold finalized edit results", () => {
     const view = state.viewFor(final);
     expect(view).toBeDefined();
     expect(view?.summary.messages).toBe(2);
-    expect(view?.summary.fileDiff).toBeUndefined();
   });
 });
 

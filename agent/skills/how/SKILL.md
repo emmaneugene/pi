@@ -1,6 +1,6 @@
 ---
 name: how
-description: 'Use for "how does X work", code walkthroughs before changing something, and placement / ownership / layering questions ("where should this live", "which package owns this", "is this the right layer"). Explains subsystem architecture, runtime flow, onboarding mental models. Can critique architecture. Use why for motivation, blast-radius for what a change breaks elsewhere.'
+description: 'Use for "how does X work", code walkthroughs before changing something, and placement / ownership / layering questions ("where should this live", "which package owns this", "is this the right layer"). Explains subsystem architecture, runtime flow, onboarding mental models. Can critique architecture. Use why for motivation, verify-this for what a change breaks elsewhere.'
 source: https://github.com/cursor/plugins/tree/main/pstack/skills/how/SKILL.md
 ---
 

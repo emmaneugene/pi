@@ -22,18 +22,11 @@ export default function (pi: ExtensionAPI) {
     ],
     parameters: Type.Object({}),
     execute: async (_toolCallId, _params, _signal, _onUpdate, ctx) => {
-      const hasConfiguredScope = ctx.scopedModels.length > 0;
-      const scopedModels = hasConfiguredScope
-        ? ctx.scopedModels
-        : ctx.modelRegistry
-            .getAvailable()
-            .map((model) => ({ model, thinkingLevel: undefined }));
+      const scopedModels = ctx.scopedModels;
       const currentModel = ctx.model;
       const details = {
         cwd: ctx.cwd,
-        scopeSource: hasConfiguredScope
-          ? "session scopedModels"
-          : "all available models fallback",
+        scopeSource: "session scopedModels",
         currentModel: currentModel
           ? {
               id: modelRef(currentModel),

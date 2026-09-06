@@ -1,7 +1,9 @@
 ---
 name: verify-this
-description: Verify a behavioral, UI, CLI, API, performance, or memory claim with fresh local evidence. Use when asked to verify, prove a fix works, compare before and after, or show evidence beyond passing tests.
-source: https://github.com/cursor/plugins/tree/main/cursor-team-kit/skills/verify-this
+description: Verify a behavioral, UI, CLI, API, performance, or memory claim with fresh local evidence, and find what a change could break somewhere else before it ships. Use when asked to verify, prove a fix works, compare before and after, show evidence beyond passing tests, or for "blast radius of X" / "what could this break".
+source:
+  - https://github.com/cursor/plugins/tree/main/cursor-team-kit/skills/verify-this
+  - https://github.com/cursor/plugins/tree/main/pstack/skills/blast-radius
 ---
 
 # Verify this
@@ -38,6 +40,26 @@ Prefer an existing repository harness. Do not install a dependency to create a n
 Never reset, switch, or overwrite the active checkout to obtain a baseline. Prefer a reproduction before editing. If historical code is required, use an isolated temporary worktree when it will not require unsafe setup; otherwise mark the missing baseline as a limitation.
 
 A passing test is sufficient only when the claim concerns that test's contract. User-visible claims require evidence from the real user surface.
+
+## What else could this break
+
+Listing the callers is not the job; grep does that in a second. The job is the breakage grep will not show you. `how` tells you what the code does and `why` tells you why it is shaped that way; this section tells you what it breaks somewhere else.
+
+**Find the one fact.** Most changes that look scary are safe because of a single fact — "this call only drops already-dead cache entries". Find it. If it holds, most of the scary cases die at once. Spend your time here, not on a long list of maybes.
+
+**Look where grep stops.** Read the source of the library you call, at its pinned version, with any local patch. Work out when things run: microtasks, unmount and teardown, job and transaction boundaries, migration order. Follow what a symbol search misses: the JSON an API returns, a DB column, a wire format, a generated file, another language reading the same bytes, a feature flag, a second component that independently enforces the same rule, code three hops downstream.
+
+**Say how sure you are.** For each fact the change's safety depends on, get it as far down this ladder as is cheap and say where it stopped:
+
+1. You said so. Worthless on its own.
+2. You pointed at the line — a real `file:line`, or the library's own source.
+3. You showed the bad case cannot happen — you walked the failure step by step and it does not reach.
+4. You ran it — a script or test that calls the real code and fails loud if you are wrong.
+5. You reproduced it in the running app.
+
+A safety fact that does not reach step 4 is written up as **unproven**, not as settled. Step 4 is usually one small script that imports what the app ships and calls the exact function you are worried about. A writeup that sounds right is worthless; it reads as convincing whether or not it is true.
+
+**Hand back:** the one fact and the step it reached, with the proof pasted; the real risks, each with how it breaks, `file:line`, likelihood, cost, and how to check; what you checked and cleared; and the cheapest test that catches the real bug. A search that finds nothing is still an answer. Never invent a caller or an API. For a wide change, ask two models on different providers the same question through subagents and merge the answers — different models catch different real bugs.
 
 ## Store artifacts safely
 

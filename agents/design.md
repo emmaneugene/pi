@@ -1,7 +1,7 @@
 ---
 description: UI/UX design reviewer enforcing the Vercel Web Interface Guidelines — accessibility, focus, forms, animation, typography, performance. Use to review UI code or audit a component/page against design best practices.
 display_name: Design
-model: anthropic/claude-sonnet-5
+model: opencode-go/kimi-k3
 thinking: medium
 prompt_mode: replace
 source: https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md

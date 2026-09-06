@@ -30,7 +30,9 @@ const MAX_LIST_ROWS_PER_COLUMN = 6;
 const MIN_LIST_COLUMN_WIDTH = 22;
 const LIST_COLUMN_GAP = 2;
 const RESOURCE_POLL_INTERVAL_MS = 50;
-const MAX_RESOURCE_RETRIES = 3;
+// Pi 0.85 fills the resource panel about 250ms after session_start; poll for
+// up to 1s so a slower machine still gets the custom layout.
+const MAX_RESOURCE_RETRIES = 20;
 const LAYOUT_NOTICE =
   "pi-welcome-screen: unrecognized Pi layout — using native panel";
 const RESOURCE_PANEL_INDEX = 1;
@@ -52,13 +54,7 @@ export interface WelcomeResources {
   context: string[];
   skills: string[];
   prompts: string[];
-  extensions: string[];
-  /** Extensions loaded from npm or git packages. */
-  packageExtensions?: string[];
-  /** Local extension entry points outside Pi's extension directories. */
-  sourceExtensions?: string[];
-  /** @deprecated Use packageExtensions. */
-  vendoredExtensions?: string[];
+  extensions: ExtensionGroups;
 }
 
 interface CollapsedTextComponent extends Component {
@@ -208,8 +204,11 @@ function unique(items: string[]): string[] {
 }
 
 interface ExtensionGroups {
+  /** Extensions from Pi's extension directories. */
   localExtensions: string[];
+  /** Extensions loaded from npm or git packages. */
   packageExtensions: string[];
+  /** Local extension entry points outside Pi's extension directories. */
   sourceExtensions: string[];
 }
 
@@ -453,23 +452,11 @@ export function parseWelcomeResources(
   const skills = unique(splitList(bodies.get("Skills") ?? []));
   const prompts = unique(splitList(bodies.get("Prompts") ?? []));
   const extensionLabels = unique(splitList(bodies.get("Extensions") ?? []));
-  const groups =
+  const extensions =
     parseExpandedExtensionGroups(expandedExtensionsText, localExtensionNames) ??
     classifyCompactExtensionLabels(extensionLabels, localExtensionNames);
-  const extensions = [
-    ...groups.localExtensions,
-    ...groups.packageExtensions,
-    ...groups.sourceExtensions,
-  ];
 
-  return {
-    context,
-    skills,
-    prompts,
-    extensions,
-    packageExtensions: groups.packageExtensions,
-    sourceExtensions: groups.sourceExtensions,
-  };
+  return { context, skills, prompts, extensions };
 }
 
 function takeResourcePanel(tui: TUI): ResourceBridge | undefined {
@@ -607,18 +594,10 @@ function getSharedMultiColumnCount(
   resources: WelcomeResources,
   columnWidth: number,
 ): 2 | 3 {
-  const packageExtensions = new Set(
-    resources.packageExtensions ??
-      resources.vendoredExtensions ??
-      resources.extensions.filter((name) => name.startsWith("@")),
-  );
-  const sourceExtensions = new Set(resources.sourceExtensions ?? []);
-  const localExtensions = resources.extensions.filter(
-    (name) => !packageExtensions.has(name) && !sourceExtensions.has(name),
-  );
-  const multiColumnLists = [resources.skills, localExtensions].filter(
-    (items) => items.length > MAX_LIST_ROWS_PER_COLUMN,
-  );
+  const multiColumnLists = [
+    resources.skills,
+    resources.extensions.localExtensions,
+  ].filter((items) => items.length > MAX_LIST_ROWS_PER_COLUMN);
   return multiColumnLists.every((items) =>
     canUseThreeColumns(items, columnWidth),
   )
@@ -694,9 +673,7 @@ function appendSection(
 
 function appendExtensionsSection(
   lines: string[],
-  extensions: string[],
-  packageExtensionNames: string[] | undefined,
-  sourceExtensionNames: string[] | undefined,
+  extensions: ExtensionGroups,
   theme: Theme,
   columnWidth: number,
   sharedColumnCount: 2 | 3,
@@ -704,38 +681,24 @@ function appendExtensionsSection(
   if (lines.length > 0) lines.push("");
   lines.push(theme.fg("mdHeading", "[Extensions]"));
 
-  if (extensions.length === 0) {
-    lines.push(theme.fg("dim", "  (none)"));
-    return;
-  }
-
-  const packageExtensions = new Set(
-    // Keep direct callers that provide only `extensions` backward compatible.
-    packageExtensionNames ?? extensions.filter((name) => name.startsWith("@")),
-  );
-  const sourceExtensions = new Set(sourceExtensionNames ?? []);
-  const localExtensions = extensions.filter(
-    (name) => !packageExtensions.has(name) && !sourceExtensions.has(name),
-  );
-  const installedPackageExtensions = extensions.filter((name) =>
-    packageExtensions.has(name),
-  );
-  const linkedSourceExtensions = extensions.filter((name) =>
-    sourceExtensions.has(name),
-  );
   const groups = [
-    { title: "Local", items: localExtensions, multiColumn: true },
+    { title: "Local", items: extensions.localExtensions, multiColumn: true },
     {
       title: "Packages",
-      items: installedPackageExtensions,
+      items: extensions.packageExtensions,
       multiColumn: false,
     },
     {
       title: "Source paths",
-      items: linkedSourceExtensions,
+      items: extensions.sourceExtensions,
       multiColumn: false,
     },
   ].filter(({ items }) => items.length > 0);
+
+  if (groups.length === 0) {
+    lines.push(theme.fg("dim", "  (none)"));
+    return;
+  }
 
   for (const [index, group] of groups.entries()) {
     if (index > 0) lines.push("");
@@ -789,8 +752,6 @@ function appendResourceSection(
     appendExtensionsSection(
       lines,
       resources.extensions,
-      resources.packageExtensions ?? resources.vendoredExtensions,
-      resources.sourceExtensions,
       theme,
       columnWidth,
       sharedColumnCount,
@@ -1026,10 +987,13 @@ class WelcomeHeader implements Component {
           expandedExtensionsText,
         )
       : undefined;
-    // Pi 0.80 builds this panel synchronously. If a future Pi populates it
-    // asynchronously after Extensions appears, this snapshot can be incomplete.
+    // Pi populates this panel after session_start, so early snapshots can be
+    // incomplete; the welcome-screen entry itself marks the panel as done.
     const resourcePanelIsComplete = Boolean(
-      candidateResources?.extensions.some(isWelcomeScreenExtension),
+      candidateResources &&
+      Object.values(candidateResources.extensions)
+        .flat()
+        .some(isWelcomeScreenExtension),
     );
     if (resourcePanelIsComplete) {
       this.resources = candidateResources;

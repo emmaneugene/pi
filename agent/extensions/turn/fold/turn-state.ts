@@ -1,6 +1,3 @@
-import { resolve } from "node:path";
-
-import { editDiffFromToolResult, type EditDiffSummary, TurnEditDiffs } from "./edit-diff-stat.ts";
 import type { CompactionReason, EphemeralCompactionAssociation } from "./ephemeral-compactions.ts";
 import { foldDisplay, type FoldDisplay } from "./fold-policy.ts";
 import { nextTurnFoldMode, type TurnFoldMode } from "./mode.ts";
@@ -16,16 +13,14 @@ import {
 
 const LIVE_ACTIVITY_LIMIT = 3;
 
-type ComponentKind = "assistant" | "compaction" | "tool";
-
-type ComponentInfo = {
-  kind: ComponentKind;
-  sequence: number;
-};
+type GroupComponent =
+  | { kind: "assistant"; sequence: number; snapshot: AssistantSnapshot }
+  | { kind: "tool"; sequence: number; toolCallId: string }
+  | { kind: "compaction"; sequence: number };
 
 type GroupLayoutParts = {
   activities: object[];
-  components: object[];
+  first: object | undefined;
   lastAssistant: object | undefined;
   toolComponents: Map<string, object>;
 };
@@ -43,11 +38,9 @@ type GroupLayout = {
 type TurnGroup = {
   aborted: boolean;
   assistantKeys: Set<string>;
-  assistants: Map<object, AssistantSnapshot>;
   compactionIds: Set<string>;
   compactionTimestamps: Set<number>;
-  components: Map<object, ComponentInfo>;
-  editDiffs: TurnEditDiffs;
+  components: Map<object, GroupComponent>;
   endedAt?: number;
   failedToolCallIds: Set<string>;
   id: string;
@@ -58,10 +51,7 @@ type TurnGroup = {
   startedByUser: boolean;
   terminalErrorToolCallIds: Set<string>;
   toolCallIds: Set<string>;
-  tools: Map<object, string>;
 };
-
-export type FoldFileDiff = EditDiffSummary;
 
 export type FoldSummary = {
   aborted: boolean;
@@ -69,7 +59,6 @@ export type FoldSummary = {
   completedAt: number | undefined;
   durationMs: number;
   failedTools: number;
-  fileDiff?: FoldFileDiff;
   hiddenActivities: number;
   messages: number;
   running: boolean;
@@ -93,14 +82,6 @@ function invalidateComponent(component: object): void {
 
 function sameStrings(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
-function assistantHasVisibleContent(snapshot: AssistantSnapshot | undefined): boolean {
-  return snapshot?.hasVisibleContent === true;
-}
-
-function assistantIsDisplayable(snapshot: AssistantSnapshot | undefined): boolean {
-  return snapshot?.hasVisibleContent === true || snapshot?.hasTerminalNotice === true;
 }
 
 function assistantLayoutChanged(
@@ -140,29 +121,10 @@ export class TurnFoldState {
   private pendingLiveCompactionGroups: (string | null)[] = [];
   // Remains monotonic because retained rows keep their componentSequence values.
   private sequence = 0;
-  private readonly showEditDiffs: boolean;
   private toolGroupById = new Map<string, string>();
   private userComponentGroup = new WeakMap<object, string>();
   private userGroupCursor = 0;
   private userGroupIds: string[] = [];
-  private workingDirectory: string;
-
-  constructor(
-    workingDirectoryOrOptions:
-      | string
-      | { showEditDiffs?: boolean; workingDirectory?: string } = process.cwd(),
-  ) {
-    const options =
-      typeof workingDirectoryOrOptions === "string"
-        ? { workingDirectory: workingDirectoryOrOptions }
-        : workingDirectoryOrOptions;
-    this.workingDirectory = resolve(options.workingDirectory ?? process.cwd());
-    this.showEditDiffs = options.showEditDiffs ?? true;
-  }
-
-  setWorkingDirectory(workingDirectory: string): void {
-    this.workingDirectory = resolve(workingDirectory);
-  }
 
   getMode(): TurnFoldMode {
     return this.mode;
@@ -291,16 +253,6 @@ export class TurnFoldState {
     this.markGroupChanged(group);
   }
 
-  registerToolResult(message: unknown): void {
-    const editDiff = editDiffFromToolResult(message);
-    if (!editDiff) return;
-    const groupId = this.toolGroupById.get(editDiff.toolCallId) ?? this.activeGroupId;
-    const group = groupId ? this.groups.get(groupId) : undefined;
-    if (group?.editDiffs.add(editDiff.toolCallId, editDiff.stat)) {
-      this.markGroupChanged(group);
-    }
-  }
-
   associateUser(component: object): void {
     if (this.userComponentGroup.has(component)) return;
     const groupId = this.userGroupIds[this.userGroupCursor];
@@ -339,12 +291,18 @@ export class TurnFoldState {
     const group = this.groupForAssistantComponent(component, snapshot);
     if (!group) return;
 
-    const previousSnapshot = group.assistants.get(component);
-    const added = this.associateComponent(component, group, "assistant");
-    group.assistants.set(component, snapshot);
-    if (added || assistantLayoutChanged(previousSnapshot, snapshot)) {
-      this.markGroupChanged(group);
+    const previous = group.components.get(component);
+    const previousSnapshot = previous?.kind === "assistant" ? previous.snapshot : undefined;
+    const sequence = this.associateComponent(component, group);
+    const added = sequence !== undefined;
+    if (added) {
+      group.components.set(component, { kind: "assistant", sequence, snapshot });
+    } else if (previous?.kind === "assistant") {
+      group.components.set(component, { ...previous, snapshot });
+    } else {
+      return;
     }
+    if (added || assistantLayoutChanged(previousSnapshot, snapshot)) this.markGroupChanged(group);
   }
 
   associateTool(component: object, toolCallId: string): void {
@@ -352,8 +310,16 @@ export class TurnFoldState {
     const group = groupId ? this.groups.get(groupId) : undefined;
     if (!group) return;
 
-    const added = this.associateComponent(component, group, "tool");
-    group.tools.set(component, toolCallId);
+    const previous = group.components.get(component);
+    const sequence = this.associateComponent(component, group);
+    const added = sequence !== undefined;
+    if (added) {
+      group.components.set(component, { kind: "tool", sequence, toolCallId });
+    } else if (previous?.kind === "tool") {
+      group.components.set(component, { ...previous, toolCallId });
+    } else {
+      return;
+    }
     if (added) this.markGroupChanged(group);
   }
 
@@ -389,9 +355,10 @@ export class TurnFoldState {
     this.compactionComponentGroup.set(component, groupId);
     const group = groupId ? this.groups.get(groupId) : undefined;
     if (!group) return;
-    if (this.associateComponent(component, group, "compaction")) {
-      this.markGroupChanged(group);
-    }
+    const sequence = this.associateComponent(component, group);
+    if (sequence === undefined) return;
+    group.components.set(component, { kind: "compaction", sequence });
+    this.markGroupChanged(group);
   }
 
   settleActive(endedAt = Date.now()): void {
@@ -523,33 +490,39 @@ export class TurnFoldState {
   }
 
   private collectLayoutComponent(
-    group: TurnGroup,
     parts: GroupLayoutParts,
     component: object,
-    info: ComponentInfo,
+    entry: GroupComponent,
   ): void {
-    const assistant = group.assistants.get(component);
-    if (info.kind === "tool" || assistantHasVisibleContent(assistant)) {
-      parts.activities.push(component);
+    switch (entry.kind) {
+      case "assistant":
+        if (entry.snapshot.hasVisibleContent) parts.activities.push(component);
+        if (entry.snapshot.hasVisibleContent || entry.snapshot.hasTerminalNotice) {
+          parts.lastAssistant = component;
+        }
+        break;
+      case "tool":
+        parts.activities.push(component);
+        parts.toolComponents.set(entry.toolCallId, component);
+        break;
+      case "compaction":
+        break;
     }
-    if (assistantIsDisplayable(assistant)) parts.lastAssistant = component;
-    const toolCallId = group.tools.get(component);
-    if (toolCallId) parts.toolComponents.set(toolCallId, component);
   }
 
   private collectLayoutParts(group: TurnGroup): GroupLayoutParts {
     const parts: GroupLayoutParts = {
       activities: [],
-      components: [],
+      first: undefined,
       lastAssistant: undefined,
       toolComponents: new Map(),
     };
     const components = [...group.components].sort(
       ([, left], [, right]) => left.sequence - right.sequence,
     );
-    for (const [component, info] of components) {
-      parts.components.push(component);
-      this.collectLayoutComponent(group, parts, component, info);
+    for (const [component, entry] of components) {
+      parts.first ??= component;
+      this.collectLayoutComponent(parts, component, entry);
     }
     return parts;
   }
@@ -577,7 +550,7 @@ export class TurnFoldState {
       hiddenActivities: Math.max(0, parts.activities.length - LIVE_ACTIVITY_LIMIT),
       recentActivities: new Set(parts.activities.slice(-LIVE_ACTIVITY_LIMIT)),
       revision: group.revision,
-      settledSummaryAnchor: parts.components[0],
+      settledSummaryAnchor: parts.first,
       streamingSummaryAnchor:
         parts.activities.length > LIVE_ACTIVITY_LIMIT ? parts.activities[0] : undefined,
     };
@@ -586,7 +559,7 @@ export class TurnFoldState {
   }
 
   private summary(group: TurnGroup, layout: GroupLayout, now: number): FoldSummary {
-    const summary: FoldSummary = {
+    return {
       aborted: group.aborted,
       compactions: group.compactionIds.size,
       completedAt: group.endedAt,
@@ -597,24 +570,17 @@ export class TurnFoldState {
       running: !group.settled,
       tools: group.toolCallIds.size,
     };
-    const fileDiff = this.showEditDiffs
-      ? group.editDiffs.summary((path) => resolve(this.workingDirectory, path))
-      : undefined;
-    if (fileDiff) summary.fileDiff = fileDiff;
-    return summary;
   }
 
-  private associateComponent(component: object, group: TurnGroup, kind: ComponentKind): boolean {
-    if (this.componentInfo.has(component)) return false;
+  private associateComponent(component: object, group: TurnGroup): number | undefined {
+    if (this.componentInfo.has(component)) return undefined;
     let sequence = this.componentSequence.get(component);
     if (sequence === undefined) {
       this.sequence += 1;
       sequence = this.sequence;
     }
-    const info = { kind, sequence };
-    group.components.set(component, info);
     this.componentInfo.set(component, { groupId: group.id });
-    return true;
+    return sequence;
   }
 
   private createGroup(startedAt: number, settled: boolean, startedByUser = false): TurnGroup {
@@ -622,11 +588,9 @@ export class TurnFoldState {
     const group: TurnGroup = {
       aborted: false,
       assistantKeys: new Set(),
-      assistants: new Map(),
       compactionIds: new Set(),
       compactionTimestamps: new Set(),
       components: new Map(),
-      editDiffs: new TurnEditDiffs(),
       failedToolCallIds: new Set(),
       id: `turn-${String(this.groupCounter)}`,
       layout: undefined,
@@ -636,7 +600,6 @@ export class TurnFoldState {
       startedByUser,
       terminalErrorToolCallIds: new Set(),
       toolCallIds: new Set(),
-      tools: new Map(),
     };
     this.groups.set(group.id, group);
     if (startedByUser) this.userGroupIds.push(group.id);
@@ -733,8 +696,6 @@ export class TurnFoldState {
       this.toolGroupById.set(toolCallId, group.id);
     }
     this.indexHistoricalToolError(group, message, toolCallId);
-    const editDiff = editDiffFromToolResult(message);
-    if (editDiff) group.editDiffs.add(editDiff.toolCallId, editDiff.stat);
     const timestamp = completedAt ?? numberField(message, "timestamp");
     if (timestamp !== undefined) group.endedAt = Math.max(group.endedAt ?? 0, timestamp);
   }
@@ -770,9 +731,7 @@ export class TurnFoldState {
     this.userComponentGroup = new WeakMap();
     this.userGroupCursor = 0;
     for (const group of this.groups.values()) {
-      group.assistants.clear();
       group.components.clear();
-      group.tools.clear();
       group.revision += 1;
       group.layout = undefined;
     }
@@ -844,9 +803,7 @@ export class TurnFoldState {
   }
 
   private mergeVisibleActiveGroups(active: TurnGroup, visibleGroups: readonly TurnGroup[]): void {
-    active.assistants.clear();
     active.components.clear();
-    active.tools.clear();
     for (const visible of visibleGroups) {
       active.aborted ||= visible.aborted;
       active.assistantKeys = new Set([...active.assistantKeys, ...visible.assistantKeys]);
@@ -861,7 +818,6 @@ export class TurnFoldState {
       ]);
       active.terminalErrorToolCallIds = new Set(visible.terminalErrorToolCallIds);
       active.toolCallIds = new Set([...active.toolCallIds, ...visible.toolCallIds]);
-      active.editDiffs.merge(visible.editDiffs);
     }
     active.revision += 1;
     active.layout = undefined;

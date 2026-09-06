@@ -7,13 +7,13 @@ description: Generate self-contained HTML visual explanations for systems, code 
 
 Produce a self-contained HTML page that makes one thing genuinely understood. You own the structure: pick the sections, diagram language, and depth that fit the content. This skill supplies the quality bar, the house design language, and the few building blocks that are hard to get right — not a page recipe.
 
-**Boundary**: static explanatory documents (interactivity limited to zoom/pan, collapsibles, quiz reveals, slide nav). If the user needs a real app — state management, routing, forms, editable data — use the `web-app-builder` skill instead.
+**Boundary**: static explanatory documents (interactivity limited to zoom/pan, collapsibles, quiz reveals, slide nav). This skill does not build interactive apps.
 
 ## Interactive vs pipeline use
 
 **Interactive session (a person asked for an explainer): interview, then build iteratively. Do not one-shot.**
 
-1. **Interview first.** Ask 2–3 questions before writing anything: who reads this and what do they already know; what specifically is confusing or what decision the page must support; overview or deep walkthrough. Skip only what the conversation already answered.
+1. **Interview first.** Ask 2–3 questions with `AskUserQuestion` before writing anything: who reads this and what do they already know; what specifically is confusing or what decision the page must support; overview or deep walkthrough. Skip only what the conversation already answered.
 2. **Skeleton before flesh.** Deliver a thin version first — title, section outline, one representative diagram, the core example you intend to trace through. Ask what's missing or wrong.
 3. **Build out on feedback.** Deepen the sections that matter to the reader; cut the ones that don't. Repeat until the reader says it lands.
 
@@ -45,7 +45,7 @@ Within that identity, vary layout and composition freely to serve the content.
 - **Single self-contained file.** Inline CSS/JS; CDN links only for libraries (Mermaid, Chart.js, Google Fonts — always with font fallbacks).
 - **Semantic HTML** for tables, headings, lists, `<details>`, and captions. Long pages get a table of contents; make a skippable `<details>` primer for background the expert reader already has.
 - **Mermaid diagram shell.** Never emit a bare `<pre class="mermaid">`. Start complex diagrams from `./templates/mermaid-flowchart.html` — it wires zoom, pan, fit, 1:1, and expand controls. Use `theme: 'base'` with page-matched variables; quoted labels with `<br/>` (never `\n`); never define a page-level `.node` CSS class (Mermaid uses it).
-- Other files under `./templates/` and `./references/` are legacy reference material — consult them only when stuck on a specific mechanism (slide chrome, responsive nav, bespoke SVG diagrams), not as required reading or page recipes.
+- Consult the rest only when stuck on a specific mechanism, not as required reading: `./references/css-patterns.md` (overflow guards, tables, connectors, bespoke diagrams, slide density limits), `./references/libraries.md` (Mermaid theming and syntax gotchas, Chart.js, fonts), `./references/responsive-nav.md` (sticky table of contents with scroll-spy), `./templates/slide-deck.html` (the slide engine, for slides on request).
 - **Hand-built HTML/inline-SVG diagrams** when the point is visual weight, layering, or mass rather than graph structure — Mermaid can't do editorial emphasis.
 - **Slides on request only**: one `100dvh` viewport per slide, visible prev/next + keyboard nav, and no dropped content to hit a slide count.
 

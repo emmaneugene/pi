@@ -58,14 +58,14 @@ directory under `~/.pi/agent/extensions/` loads it automatically.
 
 ## Development
 
-Run the dependency-free integration tests with the Node version used by Pi:
+Run the tests:
 
 ```bash
-node --experimental-strip-types --test test/*.test.ts
+npm test   # from ~/.pi/agent
 ```
 
 Type-check from a Pi config checkout with dependencies installed:
 
 ```bash
-npx tsc -p tsconfig.check.json
+npm run typecheck   # from ~/.pi/agent
 ```

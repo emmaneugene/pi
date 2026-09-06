@@ -1,11 +1,12 @@
 import { strict as assert } from "node:assert";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 
 import {
   compileQuery,
   decodeSessionDirName,
   extractText,
   extractToolCallText,
+  isContained,
   parseDateOrThrow,
   parseFindSessionsArgs,
   parseSessionFileTimestamp,
@@ -311,5 +312,17 @@ describe("parseFindSessionsArgs", () => {
   it("returns no query when only flags are given", () => {
     const r = parseFindSessionsArgs("--cwd=foo");
     assert.equal(r.query, undefined);
+  });
+});
+
+describe("isContained", () => {
+  it("accepts the root itself and paths under it", () => {
+    assert.equal(isContained("/root", "/root"), true);
+    assert.equal(isContained("/root", "/root/a/b.jsonl"), true);
+  });
+
+  it("rejects a sibling that shares the root as a prefix", () => {
+    assert.equal(isContained("/root", "/root-evil/a.jsonl"), false);
+    assert.equal(isContained("/root", "/"), false);
   });
 });

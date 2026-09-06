@@ -5,7 +5,7 @@ import {
   composeSessionName,
   currentModelId,
   firstUserMessageText,
-  isUserNamedLocked,
+  namingOwner,
   lastMessageText,
   readSummaryState,
   shouldGenerateSummary,
@@ -79,21 +79,21 @@ describe("readSummaryState", () => {
   });
 });
 
-describe("isUserNamedLocked", () => {
-  it("is unlocked when no latch exists", () => {
-    expect(isUserNamedLocked([message("user", text("hi"))])).toBe(false);
+describe("namingOwner", () => {
+  it("is auto when no latch exists", () => {
+    expect(namingOwner([message("user", text("hi"))])).toBe("auto");
   });
 
   it("locks when --name ran before any summary", () => {
-    expect(isUserNamedLocked([userNamed(true)])).toBe(true);
+    expect(namingOwner([userNamed(true)])).toBe("locked");
   });
 
   it("clears the lock when /summary:update appends locked: false", () => {
-    expect(isUserNamedLocked([userNamed(true), userNamed(false)])).toBe(false);
+    expect(namingOwner([userNamed(true), userNamed(false)])).toBe("auto");
   });
 
   it("uses the latest latch", () => {
-    expect(isUserNamedLocked([userNamed(false), userNamed(true)])).toBe(true);
+    expect(namingOwner([userNamed(false), userNamed(true)])).toBe("locked");
   });
 
   it("skips a malformed latch and keeps the previous one", () => {
@@ -103,7 +103,18 @@ describe("isUserNamedLocked", () => {
       customType: "user-named",
       data: { locked: "yes" },
     } as Entry;
-    expect(isUserNamedLocked([userNamed(true), malformed])).toBe(true);
+    expect(namingOwner([userNamed(true), malformed])).toBe("locked");
+  });
+
+  it("is skipped once a skip marker exists, even under a lock", () => {
+    const skip = {
+      type: "custom",
+      id: "s",
+      customType: "skip-summary",
+    } as Entry;
+    expect(namingOwner([skip])).toBe("skipped");
+    expect(namingOwner([skip, userNamed(true)])).toBe("skipped");
+    expect(namingOwner([userNamed(true), skip])).toBe("skipped");
   });
 });
 

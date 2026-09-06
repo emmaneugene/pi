@@ -71,13 +71,13 @@ interactive editor wiring.
 Run the vendored upstream test suite from `~/.pi/agent/`:
 
 ```bash
-npm run test:prompt-queue
+npm test   # from ~/.pi/agent
 ```
 
 Type-check the runtime and tests:
 
 ```bash
-npx tsc -p extensions/prompt-queue/tsconfig.check.json
+npm run typecheck   # from ~/.pi/agent
 ```
 
 The upstream package retains its coverage, mutation, and Slophammer configuration.

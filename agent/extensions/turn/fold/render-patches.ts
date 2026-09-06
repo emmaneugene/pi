@@ -6,20 +6,13 @@ import {
   ToolExecutionComponent,
   UserMessageComponent,
 } from "@earendil-works/pi-coding-agent";
-import {
-  Container,
-  sliceByColumn,
-  Spacer,
-  truncateToWidth,
-  visibleWidth,
-} from "@earendil-works/pi-tui";
+import { Container, Spacer, truncateToWidth } from "@earendil-works/pi-tui";
 
-import type { EditFileDiff } from "./edit-diff-stat.ts";
 import { isForeignTranscriptComponent } from "../../../lib/transcript-component-scope.ts";
 import { removeToolHorizontalPadding } from "./tool-padding.ts";
 import { formatLocalTimestamp } from "./local-time.ts";
 import type { FoldDisplay } from "./fold-policy.ts";
-import type { FoldFileDiff, FoldSummary } from "./turn-state.ts";
+import type { FoldSummary } from "./turn-state.ts";
 import { TurnFoldState } from "./turn-state.ts";
 
 export type RestoreRenderPatches = () => void;
@@ -63,150 +56,36 @@ function formatDuration(durationMs: number): string {
   return parts.join(" ");
 }
 
-type SummaryItem = string | FoldFileDiff;
-type SummaryTone = "addition" | "base" | "deletion";
-type SummarySegment = { text: string; tone: SummaryTone };
-
-function appendSummarySegment(segments: SummarySegment[], text: string, tone: SummaryTone): void {
-  const previous = segments.at(-1);
-  if (previous?.tone === tone) previous.text += text;
-  else segments.push({ text, tone });
+function summaryLine(items: readonly string[]): string {
+  return `▶ ${items.join(" · ")}`;
 }
 
-function summarySegments(items: readonly SummaryItem[]): SummarySegment[] {
-  const segments: SummarySegment[] = [];
-  appendSummarySegment(segments, "▶ ", "base");
-  items.forEach((item, index) => {
-    if (index > 0) appendSummarySegment(segments, " · ", "base");
-    if (typeof item === "string") {
-      appendSummarySegment(segments, item, "base");
-      return;
-    }
-    appendSummarySegment(segments, `${countLabel(item.files, "file")} `, "base");
-    appendSummarySegment(segments, `+${String(item.additions)}`, "addition");
-    appendSummarySegment(segments, " ", "base");
-    appendSummarySegment(segments, `−${String(item.deletions)}`, "deletion");
-  });
-  return segments;
-}
-
-function streamingSummarySegments(summary: FoldSummary): SummarySegment[] {
-  const items: SummaryItem[] = [
+export function formatStreamingSummary(summary: FoldSummary): string {
+  const items: string[] = [
     countLabel(summary.hiddenActivities, "earlier activity", "earlier activities"),
   ];
   if (summary.tools > 0) items.push(countLabel(summary.tools, "tool"));
   if (summary.messages > 0) items.push(countLabel(summary.messages, "msg"));
-  if (summary.fileDiff) items.push(summary.fileDiff);
   if (summary.compactions > 0) items.push(compactionLabel(summary.compactions));
-  return summarySegments(items);
-}
-
-function settledSummarySegments(summary: FoldSummary): SummarySegment[] {
-  const items: SummaryItem[] = [`Worked for ${formatDuration(summary.durationMs)}`];
-  if (summary.tools > 0) items.push(countLabel(summary.tools, "tool"));
-  if (summary.messages > 0) items.push(countLabel(summary.messages, "msg"));
-  if (summary.fileDiff) items.push(summary.fileDiff);
-  if (summary.failedTools > 0) items.push(countLabel(summary.failedTools, "failure"));
-  if (summary.compactions > 0) items.push(compactionLabel(summary.compactions));
-  if (summary.aborted) items.push("interrupted");
-  return summarySegments(items);
-}
-
-function plainSummary(segments: readonly SummarySegment[]): string {
-  return segments.map((segment) => segment.text).join("");
-}
-
-export function formatStreamingSummary(summary: FoldSummary): string {
-  return plainSummary(streamingSummarySegments(summary));
+  return summaryLine(items);
 }
 
 export function formatSettledSummary(summary: FoldSummary): string {
-  return plainSummary(settledSummarySegments(summary));
+  const items: string[] = [`Worked for ${formatDuration(summary.durationMs)}`];
+  if (summary.tools > 0) items.push(countLabel(summary.tools, "tool"));
+  if (summary.messages > 0) items.push(countLabel(summary.messages, "msg"));
+  if (summary.failedTools > 0) items.push(countLabel(summary.failedTools, "failure"));
+  if (summary.compactions > 0) items.push(compactionLabel(summary.compactions));
+  if (summary.aborted) items.push("interrupted");
+  return summaryLine(items);
 }
 
-function segmentColor(tone: SummaryTone): "toolDiffAdded" | "toolDiffRemoved" | "warning" {
-  if (tone === "addition") return "toolDiffAdded";
-  if (tone === "deletion") return "toolDiffRemoved";
-  return "warning";
-}
-
-function styledSummary(
-  segments: readonly SummarySegment[],
-  width: number,
-  theme: Theme | undefined,
-): string[] {
+function styledSummary(line: string, width: number, theme: Theme | undefined): string[] {
   if (width <= 0) return [];
-  if (!theme) return ["", truncateToWidth(plainSummary(segments), width, "…")];
-  const styled = segments
-    .map((segment) => theme.bold(theme.fg(segmentColor(segment.tone), segment.text)))
-    .join("");
+  if (!theme) return ["", truncateToWidth(line, width, "…")];
+  const styled = theme.bold(theme.fg("warning", line));
   const ellipsis = theme.bold(theme.fg("warning", "…"));
   return ["", truncateToWidth(styled, width, ellipsis)];
-}
-
-function safePathText(path: string): string {
-  let safe = "";
-  for (const character of path) {
-    const codePoint = character.codePointAt(0);
-    if (
-      codePoint !== undefined &&
-      (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f))
-    ) {
-      safe += `\\x${codePoint.toString(16).padStart(2, "0")}`;
-    } else {
-      safe += character;
-    }
-  }
-  return safe;
-}
-
-function truncatePathFromLeft(path: string, width: number): string {
-  if (width <= 0) return "";
-  if (visibleWidth(path) <= width) return path;
-  if (width === 1) return "…";
-  const tailWidth = width - 1;
-  const start = Math.max(0, visibleWidth(path) - tailWidth);
-  return `…${sliceByColumn(path, start, tailWidth, true)}`;
-}
-
-function styledFileDiff(diff: EditFileDiff, theme: Theme | undefined): string {
-  const additions = `+${String(diff.additions)}`;
-  const deletions = `−${String(diff.deletions)}`;
-  if (!theme) return `${additions} ${deletions}`;
-  return `${theme.fg("toolDiffAdded", additions)} ${theme.fg("toolDiffRemoved", deletions)}`;
-}
-
-function renderedFileDiffLine(diff: EditFileDiff, width: number, theme: Theme | undefined): string {
-  if (width <= 0) return "";
-  const statWidth = visibleWidth(`+${String(diff.additions)} −${String(diff.deletions)}`);
-  const prefix = width >= statWidth + 4 ? "  " : "";
-  const pathWidth = width - visibleWidth(prefix) - statWidth - 1;
-  if (pathWidth <= 0) return truncateToWidth(styledFileDiff(diff, theme), width, "");
-
-  const path = truncatePathFromLeft(safePathText(diff.path), pathWidth);
-  const styledPath = theme ? theme.fg("toolDiffContext", path) : path;
-  return truncateToWidth(`${prefix}${styledPath} ${styledFileDiff(diff, theme)}`, width, "");
-}
-
-function renderedFileDiffLines(
-  fileDiffs: readonly EditFileDiff[],
-  width: number,
-  theme: Theme | undefined,
-): string[] {
-  if (width <= 0) return [];
-  return fileDiffs.map((diff) => renderedFileDiffLine(diff, width, theme));
-}
-
-function renderedSummary(
-  summary: FoldSummary,
-  segments: readonly SummarySegment[],
-  width: number,
-  theme: Theme | undefined,
-): string[] {
-  return [
-    ...styledSummary(segments, width, theme),
-    ...renderedFileDiffLines(summary.fileDiff?.fileDiffs ?? [], width, theme),
-  ];
 }
 
 export function renderStreamingSummary(
@@ -214,7 +93,7 @@ export function renderStreamingSummary(
   width: number,
   theme: Theme | undefined,
 ): string[] {
-  return renderedSummary(summary, streamingSummarySegments(summary), width, theme);
+  return styledSummary(formatStreamingSummary(summary), width, theme);
 }
 
 export function renderSettledSummary(
@@ -222,7 +101,7 @@ export function renderSettledSummary(
   width: number,
   theme: Theme | undefined,
 ): string[] {
-  return renderedSummary(summary, settledSummarySegments(summary), width, theme);
+  return styledSummary(formatSettledSummary(summary), width, theme);
 }
 
 function interruptionFallback(theme: Theme | undefined, width: number): string[] {

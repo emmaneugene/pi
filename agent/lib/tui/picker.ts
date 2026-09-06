@@ -18,7 +18,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { unlinkSync, writeFileSync } from "node:fs";
+import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -37,15 +37,11 @@ import {
 } from "@earendil-works/pi-tui";
 import { modalPriority } from "./modal-priority.ts";
 
-export interface CatalogArtifact {
-  /** Full artefact text. Used by the builtin editor, and for the external
-   *  editor when there is no real file to open. */
-  content: string;
-  /** Real file path to open directly in $EDITOR (e.g. a SKILL.md). */
-  path?: string;
-  /** Extension for the temp file written when `content` has no `path`. */
-  ext?: string;
-}
+export type CatalogArtifact =
+  /** A real file (e.g. a SKILL.md); $EDITOR opens it in place. */
+  | { kind: "file"; path: string }
+  /** Generated text; `ext` names the temp file written for $EDITOR. */
+  | { kind: "text"; content: string; ext?: string };
 
 export interface CatalogEntry {
   /** Row shown in the picker (label = primary column, description = rest). */
@@ -312,24 +308,23 @@ async function openArtifact(
 ): Promise<void> {
   const editorCmd = process.env.VISUAL || process.env.EDITOR;
   if (!editorCmd) {
-    await ctx.ui.editor(title, art.content);
+    const content =
+      art.kind === "file" ? readFileSync(art.path, "utf-8") : art.content;
+    await ctx.ui.editor(title, content);
     return;
   }
-  let file = art.path;
-  let temp: string | undefined;
-  if (!file) {
-    file = join(tmpdir(), `pi-catalog-${Date.now()}${art.ext ?? ".md"}`);
-    writeFileSync(file, art.content, "utf-8");
-    temp = file;
+  if (art.kind === "file") {
+    await runExternalEditor(ctx, editorCmd, art.path);
+    return;
   }
+  const temp = join(tmpdir(), `pi-catalog-${Date.now()}${art.ext ?? ".md"}`);
+  writeFileSync(temp, art.content, "utf-8");
   try {
-    await runExternalEditor(ctx, editorCmd, file);
+    await runExternalEditor(ctx, editorCmd, temp);
   } finally {
-    if (temp) {
-      try {
-        unlinkSync(temp);
-      } catch {}
-    }
+    try {
+      unlinkSync(temp);
+    } catch {}
   }
 }
 

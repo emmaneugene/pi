@@ -17,7 +17,7 @@ import { widgetLines, type WidgetPalette } from "./widget-lines.ts";
 import {
   type ManagerResult,
   ManagerWindowState,
-  type WindowTarget,
+  type WindowEntry,
 } from "./window-state.ts";
 
 const WIDGET_KEY = "onurpi-prompt-queue";
@@ -111,9 +111,9 @@ class PromptQueueRuntime {
     }
   }
 
-  private applyEdit(target: WindowTarget, text: string): void {
-    if (target.kind === "queue") this.queue.update(target.id, text.trim());
-    else this.history.updateAt(target.index, text);
+  private applyEdit(entry: WindowEntry, text: string): void {
+    if (entry.kind === "queue") this.queue.update(entry.id, text.trim());
+    else this.history.updateAt(entry.index, text);
   }
 
   private async runManager(
@@ -133,7 +133,7 @@ class PromptQueueRuntime {
       }
       const edited = await ctx.ui.editor("Edit prompt", result.text);
       if (edited !== undefined && edited.trim().length > 0)
-        this.applyEdit(result.target, edited);
+        this.applyEdit(result.entry, edited);
       this.updateWidget();
     }
   }

@@ -1,17 +1,16 @@
 /**
- * models.ts — Resolve a spawn's model reference against the session registry.
+ * models.ts — Resolve a spawn's model reference against the session scope.
  *
- * A reference is an exact `provider/id` or a unique substring of an available
- * model's id. Nothing here falls back to the parent model: an unresolvable
- * reference is a caller error, and the caller that owns a default applies it
- * itself. Silently substituting the parent model is what made a bad reference
- * invisible to the agent that wrote it.
+ * A reference is an exact `provider/id` or a unique substring of a scoped
+ * model's id. An empty scope exposes no model choices. Nothing here falls back
+ * to the global model registry or parent model: the caller that owns an
+ * inheritance policy applies it itself.
  */
 
 import type { Model } from "@earendil-works/pi-ai/compat";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-type ModelRegistry = ExtensionContext["modelRegistry"];
+type ScopedModels = ExtensionContext["scopedModels"];
 
 /** How a model is named in tool arguments and invocation records. */
 export const modelRef = (model: Model<any>): string =>
@@ -20,43 +19,37 @@ export const modelRef = (model: Model<any>): string =>
 /** Suggestions offered when a reference does not resolve. */
 const MAX_SUGGESTIONS = 5;
 
-function availableModels(registry: ModelRegistry): Model<any>[] {
-  return registry.getAvailable?.() ?? [];
+/** Unique models in the configured session scope. */
+function modelsInScope(scope: ScopedModels | undefined): Model<any>[] {
+  const models = new Map<string, Model<any>>();
+  for (const entry of scope ?? []) {
+    models.set(modelRef(entry.model), entry.model);
+  }
+  return [...models.values()];
 }
 
 /**
- * The model a reference names, or undefined when nothing matches.
+ * The scoped model a reference names, or undefined when nothing matches.
  * Empty input is "no preference", not a failed lookup.
  */
 export function findModel(
   input: string | undefined,
-  registry: ModelRegistry,
+  scope: ScopedModels | undefined,
 ): Model<any> | undefined {
   const reference = input?.trim();
   if (!reference) return undefined;
   const query = reference.toLowerCase();
-  const available = availableModels(registry);
+  const models = modelsInScope(scope);
 
-  const slash = reference.indexOf("/");
-  if (slash !== -1) {
-    const exact = registry.find(
-      reference.slice(0, slash),
-      reference.slice(slash + 1),
-    );
-    if (
-      exact &&
-      available.some((m) => m.provider === exact.provider && m.id === exact.id)
-    ) {
-      return exact;
-    }
-  }
-  // Substring over both forms, so a provider-qualified reference that missed
-  // the exact lookup can still match instead of falling through as unknown.
-  return available.find(
-    (m) =>
-      modelRef(m).toLowerCase().includes(query) ||
-      m.id.toLowerCase().includes(query),
+  const exact = models.find((model) => modelRef(model).toLowerCase() === query);
+  if (exact) return exact;
+
+  const matches = models.filter(
+    (model) =>
+      modelRef(model).toLowerCase().includes(query) ||
+      model.id.toLowerCase().includes(query),
   );
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 /** The provider and bare id a reference names, however malformed it is. */
@@ -80,25 +73,25 @@ function parseReference(input: string): {
 }
 
 /**
- * Available references closest to one that did not resolve, for the rejection
- * message. This strips a provider prefix and any `:effort` suffix first.
- * Those are the two most common ways a reference goes wrong, and stripping
- * either one still leaves a usable id fragment.
+ * Scoped references closest to one that did not resolve. This strips a
+ * provider prefix and any `:effort` suffix first. Those are the two most common
+ * ways a reference goes wrong, and stripping either one still leaves a usable
+ * id fragment.
  *
  * The named provider ranks first. One model id is often served by several
- * providers. A caller retries with the head of this list, so sending that
- * retry to a different provider would silently change auth and billing.
+ * providers. A caller retries with the head of this list, so sending that retry
+ * to a different provider would silently change auth and billing.
  */
 export function suggestModels(
   input: string,
-  registry: ModelRegistry,
+  scope: ScopedModels | undefined,
 ): string[] {
   const { provider, fragment } = parseReference(input);
-  const available = availableModels(registry);
+  const models = modelsInScope(scope);
   const matches = fragment
-    ? available.filter((m) => m.id.toLowerCase().includes(fragment))
+    ? models.filter((model) => model.id.toLowerCase().includes(fragment))
     : [];
-  const pool = matches.length > 0 ? matches : available;
+  const pool = matches.length > 0 ? matches : models;
 
   const rank = (model: Model<any>): number =>
     (model.provider.toLowerCase() === provider ? 0 : 2) +

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import turnDiffExtension from "../index.ts";
 import {
@@ -18,9 +18,11 @@ async function temporaryDirectory(prefix: string): Promise<string> {
   return mkdtemp(path.join(tmpdir(), prefix));
 }
 
-test("summarizes and patches line changes without a Git repository", async (t) => {
+test("summarizes and patches line changes without a Git repository", async ({
+  onTestFinished,
+}) => {
   const cwd = await temporaryDirectory("pi-turn-diff-nonrepo-");
-  t.after(() => rm(cwd, { recursive: true, force: true }));
+  onTestFinished(() => rm(cwd, { recursive: true, force: true }));
   const filePath = path.join(cwd, "notes.txt");
   await writeFile(filePath, "one\ntwo\nthree\n");
   const before = await captureFile(filePath);
@@ -56,9 +58,11 @@ test("summarizes and patches line changes without a Git repository", async (t) =
   assert.deepEqual(result.warnings, []);
 });
 
-test("counts and patches creation of an empty file", async (t) => {
+test("counts and patches creation of an empty file", async ({
+  onTestFinished,
+}) => {
   const cwd = await temporaryDirectory("pi-turn-diff-create-");
-  t.after(() => rm(cwd, { recursive: true, force: true }));
+  onTestFinished(() => rm(cwd, { recursive: true, force: true }));
   const filePath = path.join(cwd, "empty.txt");
   const before = await captureFile(filePath);
   assert.equal(before.status, "captured");
@@ -99,10 +103,12 @@ test("displays paths outside the working directory as absolute", () => {
   );
 });
 
-test("records only successful edit and write tool targets", async (t) => {
+test("records only successful edit and write tool targets", async ({
+  onTestFinished,
+}) => {
   const cwd = await temporaryDirectory("pi-turn-diff-cwd-");
   const outside = await temporaryDirectory("pi-turn-diff-outside-");
-  t.after(async () => {
+  onTestFinished(async () => {
     await Promise.all([
       rm(cwd, { recursive: true, force: true }),
       rm(outside, { recursive: true, force: true }),

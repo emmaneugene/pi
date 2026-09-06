@@ -19,6 +19,8 @@ function record(overrides: Partial<AgentRecord> = {}): AgentRecord {
     toolUses: 0,
     startedAt: 1_000,
     lifetimeUsage: { input: 0, output: 0, cacheWrite: 0 },
+    settled: Promise.resolve(undefined),
+    settle() {},
     ...overrides,
   };
 }

@@ -13,57 +13,59 @@ const AVAILABLE = [
   model("openai-codex", "gpt-5.6-sol"),
 ];
 
-const registry = {
-  getAvailable: () => AVAILABLE,
-  find: (provider: string, id: string) =>
-    AVAILABLE.find((m) => m.provider === provider && m.id === id),
-} as unknown as ExtensionContext["modelRegistry"];
+const scope = AVAILABLE.map((model) => ({
+  model,
+  thinkingLevel: undefined,
+})) as ExtensionContext["scopedModels"];
 
 describe("findModel", () => {
   it("treats no reference as no preference", () => {
-    expect(findModel(undefined, registry)).toBeUndefined();
-    expect(findModel("  ", registry)).toBeUndefined();
+    expect(findModel(undefined, scope)).toBeUndefined();
+    expect(findModel("  ", scope)).toBeUndefined();
   });
 
   it("resolves an exact provider/id", () => {
-    expect(findModel("openai-codex/gpt-5.6-sol", registry)).toBe(AVAILABLE[3]);
+    expect(findModel("openai-codex/gpt-5.6-sol", scope)).toBe(AVAILABLE[3]);
   });
 
-  it("resolves a bare id substring", () => {
-    expect(findModel("sonnet", registry)).toBe(AVAILABLE[0]);
+  it("resolves a unique bare id substring", () => {
+    expect(findModel("sonnet", scope)).toBe(AVAILABLE[0]);
   });
 
-  it("resolves a provider-qualified substring the exact lookup misses", () => {
-    expect(findModel("openai-codex/gpt-5.6-l", registry)).toBe(AVAILABLE[2]);
+  it("resolves a unique provider-qualified substring", () => {
+    expect(findModel("openai-codex/gpt-5.6-l", scope)).toBe(AVAILABLE[2]);
+  });
+
+  it("rejects an ambiguous substring", () => {
+    expect(findModel("gpt-5.6", scope)).toBeUndefined();
+  });
+
+  it("returns no model when the session scope is empty", () => {
+    expect(findModel("gpt-5.6-luna", [])).toBeUndefined();
+    expect(suggestModels("gpt-5.6-luna", [])).toEqual([]);
   });
 
   it("returns undefined rather than a substitute for an unknown model", () => {
     // The effort-suffix form four spawns used in past sessions.
-    expect(
-      findModel("openai-codex/gpt-5.6-luna:xhigh", registry),
-    ).toBeUndefined();
-    expect(findModel("gemini-3-pro", registry)).toBeUndefined();
+    expect(findModel("openai-codex/gpt-5.6-luna:xhigh", scope)).toBeUndefined();
+    expect(findModel("gemini-3-pro", scope)).toBeUndefined();
   });
 });
 
 describe("suggestModels", () => {
   it("recovers the intended model from an effort suffix", () => {
-    expect(suggestModels("openai-codex/gpt-5.6-luna:xhigh", registry)).toEqual([
+    expect(suggestModels("openai-codex/gpt-5.6-luna:xhigh", scope)).toEqual([
       "openai-codex/gpt-5.6-luna",
     ]);
   });
 
   it("ranks the named provider first, then exact ids", () => {
-    // The live registry shape: one model id served by several providers.
-    const crossProvider = {
-      getAvailable: () => [
-        model("openai", "gpt-5.6-luna"),
-        model("openrouter", "openai/gpt-5.6-luna-pro"),
-        model("openai-codex", "gpt-5.6-luna"),
-        model("openai-codex", "gpt-5.6-luna-pro"),
-      ],
-      find: () => undefined,
-    } as unknown as ExtensionContext["modelRegistry"];
+    const crossProvider = [
+      model("openai", "gpt-5.6-luna"),
+      model("openrouter", "openai/gpt-5.6-luna-pro"),
+      model("openai-codex", "gpt-5.6-luna"),
+      model("openai-codex", "gpt-5.6-luna-pro"),
+    ].map((model) => ({ model, thinkingLevel: undefined }));
 
     expect(
       suggestModels("openai-codex/gpt-5.6-luna:xhigh", crossProvider),
@@ -76,13 +78,13 @@ describe("suggestModels", () => {
   });
 
   it("recovers matches from a wrong provider prefix", () => {
-    expect(suggestModels("openai/gpt-5.6-sol", registry)).toEqual([
+    expect(suggestModels("openai/gpt-5.6-sol", scope)).toEqual([
       "openai-codex/gpt-5.6-sol",
     ]);
   });
 
-  it("falls back to available models when nothing is close", () => {
-    expect(suggestModels("gemini-3-pro", registry)).toEqual([
+  it("falls back to scoped models when nothing is close", () => {
+    expect(suggestModels("gemini-3-pro", scope)).toEqual([
       "anthropic/claude-sonnet-5",
       "anthropic/claude-opus-5",
       "openai-codex/gpt-5.6-luna",

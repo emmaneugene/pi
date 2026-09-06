@@ -80,11 +80,13 @@ function fileSummary(
 }
 
 export default function turnDiffExtension(pi: ExtensionAPI): void {
-  let activeRun = false;
-  let runCwd = "";
-  let initialFiles = new Map<string, TrackedFile>();
-  let toolPaths = new Map<string, string>();
-  let successfulPaths = new Set<string>();
+  // The in-progress run, or null between runs. A file is `confirmed` once an
+  // edit or write on it succeeded.
+  let run: {
+    cwd: string;
+    files: Map<string, TrackedFile & { confirmed: boolean }>;
+    toolPaths: Map<string, string>;
+  } | null = null;
 
   pi.registerEntryRenderer<TurnDiffData>(
     ENTRY_TYPE,
@@ -116,16 +118,12 @@ export default function turnDiffExtension(pi: ExtensionAPI): void {
   );
 
   pi.on("before_agent_start", async (_event, ctx) => {
-    if (activeRun) return;
-    activeRun = true;
-    runCwd = ctx.cwd;
-    initialFiles = new Map();
-    toolPaths = new Map();
-    successfulPaths = new Set();
+    if (run) return;
+    run = { cwd: ctx.cwd, files: new Map(), toolPaths: new Map() };
   });
 
   pi.on("tool_call", async (event, ctx) => {
-    if (!activeRun) return;
+    if (!run) return;
     if (
       !isToolCallEventType("edit", event) &&
       !isToolCallEventType("write", event)
@@ -134,8 +132,8 @@ export default function turnDiffExtension(pi: ExtensionAPI): void {
     }
 
     const absolutePath = resolveToolPath(event.input.path, ctx.cwd);
-    toolPaths.set(event.toolCallId, absolutePath);
-    if (initialFiles.has(absolutePath)) return;
+    run.toolPaths.set(event.toolCallId, absolutePath);
+    if (run.files.has(absolutePath)) return;
 
     const captured = await captureFile(absolutePath);
     if (captured.status === "failed") {
@@ -145,34 +143,31 @@ export default function turnDiffExtension(pi: ExtensionAPI): void {
       );
       return;
     }
-    initialFiles.set(absolutePath, {
+    // The await above may span the run's end.
+    run?.files.set(absolutePath, {
       absolutePath,
-      displayPath: displayPath(absolutePath, runCwd),
+      displayPath: displayPath(absolutePath, run.cwd),
       before: captured.snapshot,
+      confirmed: false,
     });
   });
 
   pi.on("tool_result", (event) => {
-    if (!activeRun || event.isError) return;
+    if (!run || event.isError) return;
     if (!isEditToolResult(event) && !isWriteToolResult(event)) return;
-    const absolutePath = toolPaths.get(event.toolCallId);
-    if (absolutePath && initialFiles.has(absolutePath)) {
-      successfulPaths.add(absolutePath);
-    }
+    const absolutePath = run.toolPaths.get(event.toolCallId);
+    const file = absolutePath ? run.files.get(absolutePath) : undefined;
+    if (file) file.confirmed = true;
   });
 
   pi.on("agent_settled", async (_event, ctx) => {
-    if (!activeRun) return;
-    activeRun = false;
-    const trackedFiles = [...initialFiles.values()].filter((file) =>
-      successfulPaths.has(file.absolutePath),
-    );
-    initialFiles = new Map();
-    toolPaths = new Map();
-    successfulPaths = new Set();
+    if (!run) return;
+    const { cwd, files } = run;
+    run = null;
+    const trackedFiles = [...files.values()].filter((file) => file.confirmed);
 
     try {
-      const result = await summarizeFiles(runCwd, trackedFiles);
+      const result = await summarizeFiles(cwd, trackedFiles);
       if (result.data) pi.appendEntry<TurnDiffData>(ENTRY_TYPE, result.data);
       if (result.warnings.length > 0) {
         ctx.ui.notify(

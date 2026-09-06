@@ -248,16 +248,24 @@ export function readSummaryState(branch: SessionEntry[]): SummaryState {
   };
 }
 
-export function isUserNamedLocked(branch: SessionEntry[]): boolean {
+/**
+ * Who owns the session name: "skipped" once any skip marker exists (e.g.
+ * after /move), "locked" while the latest valid user-named latch is set,
+ * otherwise "auto".
+ */
+export function namingOwner(
+  branch: SessionEntry[],
+): "skipped" | "locked" | "auto" {
+  let locked: boolean | undefined;
   for (let i = branch.length - 1; i >= 0; i--) {
     const entry = branch[i];
-    if (entry.type !== "custom" || entry.customType !== USER_NAMED_ENTRY_TYPE) {
-      continue;
+    if (entry.type !== "custom") continue;
+    if (entry.customType === SKIP_ENTRY_TYPE) return "skipped";
+    if (entry.customType === USER_NAMED_ENTRY_TYPE && locked === undefined) {
+      locked = parseLockedFlag(entry.data);
     }
-    const locked = parseLockedFlag(entry.data);
-    if (locked !== undefined) return locked;
   }
-  return false;
+  return locked ? "locked" : "auto";
 }
 
 /** Lock a cleared name, or a live name that differs from the expected compose. */
@@ -366,12 +374,6 @@ function hasSummarizableText(entries: SessionEntry[]): boolean {
     }
     return renderContent(message.content).trim().length > 0;
   });
-}
-
-function hasSkipSummary(branch: SessionEntry[]): boolean {
-  return branch.some(
-    (entry) => entry.type === "custom" && entry.customType === SKIP_ENTRY_TYPE,
-  );
 }
 
 function buildSummarizableConversation(branch: SessionEntry[]): string {
@@ -571,8 +573,8 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
     branch: SessionEntry[],
     reason: RefreshReason,
   ): boolean {
-    if (hasSkipSummary(branch)) return false;
-    return reason === "force" || !isUserNamedLocked(branch);
+    const owner = namingOwner(branch);
+    return owner === "auto" || (owner === "locked" && reason === "force");
   }
 
   async function refreshSessionNameNow(
@@ -585,7 +587,7 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
     const branch = ctx.sessionManager.getBranch() as SessionEntry[];
     if (!stillAutoNamed(branch, reason)) return;
 
-    if (reason === "force" && isUserNamedLocked(branch)) {
+    if (reason === "force" && namingOwner(branch) === "locked") {
       pi.appendEntry(USER_NAMED_ENTRY_TYPE, { locked: false });
     }
 
@@ -670,7 +672,7 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
     if (!live) return;
 
     const branch = ctx.sessionManager.getBranch() as SessionEntry[];
-    if (isUserNamedLocked(branch) || hasSkipSummary(branch)) return;
+    if (namingOwner(branch) !== "auto") return;
 
     const expected = await expectedName(ctx, branch);
     if (shouldLockSessionName(live, expected)) {
@@ -683,7 +685,7 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
     if (event.name !== undefined && appliedNames.delete(event.name)) return;
 
     const branch = ctx.sessionManager.getBranch() as SessionEntry[];
-    if (isUserNamedLocked(branch) || hasSkipSummary(branch)) return;
+    if (namingOwner(branch) !== "auto") return;
 
     if (
       shouldLockSessionName(event.name, readSummaryState(branch).composedName)
@@ -697,7 +699,7 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
     if (event.message.role !== "user") return;
 
     const branch = ctx.sessionManager.getBranch() as SessionEntry[];
-    if (isUserNamedLocked(branch) || hasSkipSummary(branch)) return;
+    if (namingOwner(branch) !== "auto") return;
     if (readSummaryState(branch).text) return;
     if (pi.getSessionName()) return;
 

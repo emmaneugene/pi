@@ -5,7 +5,6 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type CatalogArtifact, showCatalog } from "../tui/picker.ts";
 
-/** A ctx whose picker opens the first entry's artefact once, then closes. */
 function catalogCtx() {
   let opened = false;
   const editor = vi.fn(async () => undefined);
@@ -52,5 +51,22 @@ describe("showCatalog builtin editor", () => {
     writeFileSync(path, "# skill");
     const editor = await open({ kind: "file", path });
     expect(editor).toHaveBeenCalledWith("Things · one", "# skill");
+  });
+});
+
+describe("showCatalog mount", () => {
+  it("replaces the prompt editor instead of floating over chat", async () => {
+    const custom = vi.fn(async () => undefined);
+    const ctx = {
+      mode: "tui",
+      ui: { custom, notify: vi.fn() },
+    } as unknown as ExtensionContext;
+    await showCatalog(ctx, "Things", [
+      {
+        item: { label: "one", value: "one" },
+        artifact: () => ({ kind: "text", content: "one" }),
+      },
+    ]);
+    expect(custom.mock.calls[0]?.[1]).toBeUndefined();
   });
 });

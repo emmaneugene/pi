@@ -45,7 +45,7 @@ export class QueuePromptEditor extends CustomEditor {
     keybindings: KeybindingsManager,
     hooks: QueueEditorHooks,
   ) {
-    super(tui, theme, keybindings);
+    super(tui, theme, keybindings, { embedWorkingStatus: true });
     this.bindings = keybindings;
     this.hooks = hooks;
   }

@@ -58,6 +58,7 @@ Usage notes:
 
 Prefer this tool over listing options in your final response text (as letters, numbers, bullet points, etc).`,
     parameters: AskUserQuestionParamsSchema,
+    executionMode: "sequential",
 
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       if (!ctx.hasUI) {
@@ -73,9 +74,7 @@ Prefer this tool over listing options in your final response text (as letters, n
       if (!(await modalPriority.wait(_signal))) {
         return errorResult("AskUserQuestion was cancelled before it opened.");
       }
-      // Keep the path from this wait to ui.custom synchronous. An await here
-      // could let a command catalog open before the question mounts.
-
+      // No await before ui.custom: a catalog could steal the slot.
       const count = questions.length;
       const firstPrompt = questions[0]?.prompt ?? "";
       notify(

@@ -1,9 +1,4 @@
-/**
- * /subagents — list this session's subagents (live in-memory records + past
- * transcripts on disk) in the shared catalog overlay. Enter opens the native
- * session viewer, which can steer a live agent; the configured external-editor
- * key retains the prior rendered-transcript editor flow.
- */
+/** /subagents — live and on-disk children in the shared catalog. */
 
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { type CatalogEntry, showCatalog } from "../../lib/tui/picker.ts";
@@ -37,7 +32,6 @@ function ageOf(ms: number): string {
   return `${Math.round(s / 3600)}h ago`;
 }
 
-/** The session-history artefact for a transcript file (rendered, read-only). */
 function transcriptArtifact(file?: string): CatalogEntry["artifact"] {
   return () => ({
     kind: "text",
@@ -60,7 +54,6 @@ function countLabel(count: number, singular: string): string {
   return `${count} ${singular}${count === 1 ? "" : "s"}`;
 }
 
-/** Merge live records (first) with disk-only transcripts into catalog entries. */
 function gatherEntries(
   manager: SubagentManager,
   disk: DiskTranscript[],
@@ -100,7 +93,6 @@ function gatherEntries(
   return entries;
 }
 
-/** Resolve one catalog row to a viewable source, live record or stored file. */
 function sourceFor(
   manager: SubagentManager,
   disk: ReadonlyMap<string, DiskTranscript>,
@@ -120,7 +112,6 @@ function sourceFor(
   return sourceForTranscript(transcript.file, title, transcript.invocation);
 }
 
-/** Reopen the viewer when the user selects a neighboring agent. */
 async function openSessionViewer(
   ctx: ExtensionContext,
   manager: SubagentManager,
@@ -147,8 +138,7 @@ export async function showSessionSubagents(
   ctx: ExtensionContext,
   manager: SubagentManager,
 ): Promise<void> {
-  // Disk-only rows are immutable while this picker is open. Cache them so the
-  // live refresh only rebuilds labels from cheap in-memory agent records.
+  // Cache disk rows; live refresh only rebuilds in-memory labels.
   const disk = diskTranscripts(ctx);
   const diskByFile = new Map(disk.map((d) => [d.file, d]));
   const entries = () => gatherEntries(manager, disk);
@@ -156,7 +146,6 @@ export async function showSessionSubagents(
     refreshIntervalMs: 500,
     onSelect: (entry) =>
       openSessionViewer(ctx, manager, diskByFile, entries(), entry.item.value),
-    // ctrl+x stops the highlighted subagent if it's still running.
     onKill: (value) => {
       const rec = manager.getRecord(value);
       if (!rec) return { message: "Not a running subagent.", type: "warning" };

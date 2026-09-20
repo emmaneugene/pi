@@ -7,11 +7,13 @@
  * A user-set name latches `user-named`. Auto refresh does not change it.
  * `/summary:update` clears the lock and rewrites.
  *
- * Commands: /summary:update, /summary:settings
+ * An empty global config template is written when none exists, so the path and
+ * schema are easy to find.
+ *
+ * Commands: /summary:update
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { complete } from "@earendil-works/pi-ai/compat";
+import { join } from "node:path";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -33,11 +35,21 @@ const DEFAULTS = {
   timeoutSeconds: 10,
 };
 
+/** What an auto-created config file contains: no provider, no model. */
+const TEMPLATE = { provider: "", model: "", ...DEFAULTS };
+
 // ~4 chars/token → ~15k tokens, under small-model context windows.
 const MAX_CONVERSATION_CHARS = 60_000;
 const TRUNCATION_NOTICE = "[... earlier conversation truncated ...]";
 
 const SUMMARY_STATUS_KEY = "session-summary";
+
+/** Status-bar entry per state. `idle` clears it. */
+const SUMMARY_STATUS = {
+  idle: undefined,
+  generating: ["accent", "⏳ summary: generating"],
+  error: ["error", "✗ summary: failed"],
+} as const;
 
 const SUMMARY_ENTRY_TYPE = "session-summary";
 const SKIP_ENTRY_TYPE = "skip-summary";
@@ -62,8 +74,34 @@ function toPositiveInt(value: unknown, fallback: number): number {
   return fallback;
 }
 
+/** Global config file that supplies the summarizer provider and model. */
+function globalConfigPath(): string {
+  return join(getAgentDir(), "session-summary.json");
+}
+
+/**
+ * Write an empty config template when no config file exists. Returns the new
+ * path, or undefined when a file already exists or the write fails.
+ */
+function createConfigTemplate(cwd: string): string | undefined {
+  const globalPath = globalConfigPath();
+  const projectPath = join(cwd, CONFIG_DIR_NAME, "session-summary.json");
+  if (existsSync(globalPath) || existsSync(projectPath)) return undefined;
+
+  try {
+    mkdirSync(getAgentDir(), { recursive: true });
+    // "wx" fails on an existing file, so it cannot clobber a concurrent write.
+    writeFileSync(globalPath, `${JSON.stringify(TEMPLATE, null, 2)}\n`, {
+      flag: "wx",
+    });
+    return globalPath;
+  } catch {
+    return undefined;
+  }
+}
+
 function loadConfig(cwd: string): SummaryConfig | undefined {
-  const globalPath = join(getAgentDir(), "session-summary.json");
+  const globalPath = globalConfigPath();
   const projectPath = join(cwd, CONFIG_DIR_NAME, "session-summary.json");
 
   let raw: Record<string, unknown> = { ...DEFAULTS };
@@ -406,25 +444,13 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
 
   function setSummaryStatus(
     ctx: ExtensionContext,
-    state: "idle" | "generating" | "error",
+    state: keyof typeof SUMMARY_STATUS,
   ) {
     if (!ctx.hasUI) return;
-    if (state === "idle") {
-      ctx.ui.setStatus(SUMMARY_STATUS_KEY, undefined);
-      return;
-    }
-
-    if (state === "generating") {
-      ctx.ui.setStatus(
-        SUMMARY_STATUS_KEY,
-        ctx.ui.theme.fg("accent", "⏳ summary: generating"),
-      );
-      return;
-    }
-
+    const entry = SUMMARY_STATUS[state];
     ctx.ui.setStatus(
       SUMMARY_STATUS_KEY,
-      ctx.ui.theme.fg("error", "✗ summary: failed"),
+      entry ? ctx.ui.theme.fg(entry[0], entry[1]) : undefined,
     );
   }
 
@@ -436,7 +462,7 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
 
     if (!config) {
       ctx.ui.notify(
-        "[session-summary] No provider/model configured. Run /summary:settings",
+        `[session-summary] No provider/model configured. Set it in ${globalConfigPath()}`,
         "error",
       );
       return undefined;
@@ -445,12 +471,6 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
     const model = ctx.modelRegistry.find(config.provider, config.model);
     if (!model) {
       ctx.ui.notify("[session-summary] Model not found", "error");
-      return undefined;
-    }
-
-    const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
-    if (!auth?.ok || !auth.apiKey) {
-      ctx.ui.notify("[session-summary] No API key available", "error");
       return undefined;
     }
 
@@ -478,7 +498,8 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
 
     try {
       const timeoutMs = config.timeoutSeconds * 1000;
-      const response = await complete(
+      const sessionId = ctx.sessionManager.getSessionId();
+      const response = await ctx.modelRegistry.complete(
         model,
         {
           systemPrompt:
@@ -492,10 +513,8 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
           ],
         },
         {
-          apiKey: auth.apiKey,
-          headers: auth.headers,
           maxTokens: config.maxTokens,
-          sessionId: ctx.sessionManager.getSessionId(),
+          sessionId,
           signal: AbortSignal.timeout(timeoutMs),
         },
       );
@@ -633,27 +652,6 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
 
   // -- Commands ---------------------------------------------------------
 
-  pi.registerCommand("summary:settings", {
-    description: "Create/show session-summary settings file",
-    handler: async (_args, ctx) => {
-      const globalPath = join(getAgentDir(), "session-summary.json");
-      if (!existsSync(globalPath)) {
-        mkdirSync(dirname(globalPath), { recursive: true });
-        writeFileSync(
-          globalPath,
-          JSON.stringify({ ...DEFAULTS, provider: "", model: "" }, null, 2) +
-            "\n",
-        );
-        ctx.ui.notify(
-          `Created ${globalPath} — set provider and model, then /reload`,
-          "info",
-        );
-      } else {
-        ctx.ui.notify(`Settings: ${globalPath}`, "info");
-      }
-    },
-  });
-
   pi.registerCommand("summary:update", {
     description: "Force-update the session summary now",
     handler: async (_args, ctx) => {
@@ -667,6 +665,14 @@ export default function sessionSummaryExtension(pi: ExtensionAPI) {
     config = loadConfig(ctx.cwd);
     setSummaryStatus(ctx, "idle");
     if (!ctx.hasUI) return;
+
+    const created = createConfigTemplate(ctx.cwd);
+    if (created) {
+      ctx.ui.notify(
+        `[session-summary] Created ${created}. Set provider and model, then /reload.`,
+        "info",
+      );
+    }
 
     const live = pi.getSessionName();
     if (!live) return;

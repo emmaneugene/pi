@@ -1,6 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { complete } from "@earendil-works/pi-ai/compat";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -70,23 +69,11 @@ async function askVisionModel(
     );
   }
 
-  const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
-  if (!auth.ok) {
-    throw new Error(
-      `Auth failed for ${VISION_PROVIDER}/${VISION_MODEL}: ${auth.error}`,
-    );
-  }
-  if (!auth.apiKey) {
-    throw new Error(
-      `No API key or login token available for ${VISION_PROVIDER}`,
-    );
-  }
-
   const loadedImages = await Promise.all(
     imagePaths.map((p) => loadImage(ctx.cwd, p)),
   );
 
-  const response = await complete(
+  const response = await ctx.modelRegistry.complete(
     model,
     {
       messages: [
@@ -100,13 +87,15 @@ async function askVisionModel(
         },
       ],
     },
-    {
-      apiKey: auth.apiKey,
-      headers: auth.headers,
-      maxTokens: 4096,
-      signal,
-    },
+    { maxTokens: 4096, signal },
   );
+
+  if (response.stopReason === "error") {
+    throw new Error(
+      response.errorMessage ??
+        `${VISION_PROVIDER}/${VISION_MODEL} request failed`,
+    );
+  }
 
   const text = response.content
     .filter(

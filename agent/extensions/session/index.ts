@@ -3,6 +3,7 @@
  *
  * - continue.ts: /continue copies a relaunch command to the clipboard.
  * - delete.ts: /delete removes the session and its subagent transcripts.
+ * - footer.ts: shows the current session ID in the footer.
  * - move.ts: /move relocates the session to another working directory.
  * - side.ts: /side launches a right-hand Ghostty fork.
  * - summary.ts: names sessions with an LLM summary from a separate model.
@@ -14,6 +15,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import continueCommand from "./continue.ts";
 import deleteCommand from "./delete.ts";
+import sessionFooter from "./footer.ts";
 import moveCommand from "./move.ts";
 import sideCommand from "./side.ts";
 import summary from "./summary.ts";
@@ -21,6 +23,7 @@ import summary from "./summary.ts";
 export default function (pi: ExtensionAPI) {
   continueCommand(pi);
   deleteCommand(pi);
+  sessionFooter(pi);
   moveCommand(pi);
   sideCommand(pi);
   summary(pi);

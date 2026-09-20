@@ -1,12 +1,4 @@
-/**
- * /show-subagents — read-only catalog of the subagent types available in this
- * session, shown with the shared filterable picker. Selecting an entry opens
- * its full agent .md definition in the editor. Nothing is written to the
- * session, so it stays out of the exported history.
- *
- * Columns: display name · context (global/project) · tools · model · thinking
- * · prompt mode (+ enabled).
- */
+/** /show-subagents — available types; Enter opens the agent .md. */
 
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { type CatalogEntry, showCatalog } from "../../lib/tui/picker.ts";
@@ -42,12 +34,10 @@ function toEntry(c: AgentConfig): CatalogEntry {
       label: name,
       description: `${mark} ${context} · ${tools} · ${model} · ${thinking} · ${c.promptMode}`,
     },
-    // The artefact is the full agent .md definition file.
     artifact: () => ({ kind: "file", path: c.filePath }),
   };
 }
 
-/** Show the subagent-type catalog as a filterable picker with editor drill-in. */
 export async function showAgentsCatalog(
   ctx: ExtensionCommandContext,
   registry: AgentRegistry,

@@ -1,9 +1,13 @@
 /**
- * pi-inline-skill-identifier — Highlight $skill aliases and route one inline skill reference through Pi's native skill command.
+ * pi-inline-skill-identifier — Highlight $skill aliases and route inline skill
+ * references through Pi's native skill command.
  *
  * Vendored from @pi-kaush/pi-inline-skill-identifier v0.1.1
  * Source: https://github.com/kaushikgopal/pi-kaush/tree/main/extensions/pi-inline-skill-identifier
  * Author: Kaushik Gopal — License: MIT
+ *
+ * Local change: later known `$skill` tokens become `/skill:name`. Upstream
+ * still rewrites only the first alias.
  */
 // Codex-style inline skill aliases for Pi.
 //
@@ -11,8 +15,9 @@
 // This only:
 // - completes loaded skill names after `$` using Pi's native autocomplete
 // - colors known `$skill-name` tokens in the existing Pi editor render output
-// - rewrites exactly one known `$skill-name` reference to Pi's native
-//   `/skill:name ...` command, so Pi still owns skill loading and slash commands.
+// - rewrites the first known `$skill-name` to Pi's native `/skill:name ...`
+//   command, and rewrites later known `$skill-name` tokens to `/skill:name`.
+//   Unknown `$tokens` such as `$50` stay unchanged.
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
@@ -23,6 +28,7 @@ import {
 } from "@earendil-works/pi-tui";
 
 const SKILL_TOKEN_END = "(?![a-z0-9-])";
+const SKILL_COMMAND = "/skill:";
 const SKILL_ALIAS_RE = new RegExp(
   `\\$([a-z0-9][a-z0-9-]{0,63})${SKILL_TOKEN_END}`,
   "g",
@@ -148,18 +154,55 @@ export function createSkillAutocompleteProvider(
   };
 }
 
+function knownSkillAliasMatches(
+  text: string,
+  knownSkillNames: ReadonlySet<string>,
+): Array<{ name: string; index: number }> {
+  const matches: Array<{ name: string; index: number }> = [];
+  for (const match of text.matchAll(SKILL_ALIAS_RE)) {
+    const name = match[1];
+    if (!name || match.index === undefined || !knownSkillNames.has(name)) {
+      continue;
+    }
+    matches.push({ name, index: match.index });
+  }
+  return matches;
+}
+
 export function referencedSkills(
   text: string,
   knownSkillNames: ReadonlySet<string>,
 ): string[] {
   const names: string[] = [];
-  for (const match of text.matchAll(SKILL_ALIAS_RE)) {
-    const name = match[1];
-    if (name && knownSkillNames.has(name) && !names.includes(name)) {
-      names.push(name);
-    }
+  for (const { name } of knownSkillAliasMatches(text, knownSkillNames)) {
+    if (!names.includes(name)) names.push(name);
   }
   return names;
+}
+
+/**
+ * Route known `$skill` aliases through Pi's `/skill:` command.
+ *
+ * The first known alias becomes the leading `/skill:name` command. Later known
+ * aliases keep their names and change only `$` to `/skill:`. Tokens that are
+ * not loaded skill names stay as typed.
+ */
+export function rewriteSkillAliasInput(
+  text: string,
+  knownSkillNames: ReadonlySet<string>,
+): string | undefined {
+  const matches = knownSkillAliasMatches(text, knownSkillNames);
+  const first = matches[0];
+  if (!first) return undefined;
+
+  let rewritten = text;
+  for (let i = matches.length - 1; i >= 1; i--) {
+    const index = matches[i].index;
+    rewritten =
+      rewritten.slice(0, index) + SKILL_COMMAND + rewritten.slice(index + 1);
+  }
+
+  return `${SKILL_COMMAND}${first.name} ${rewritten}`;
 }
 
 export function colorizeSkillAliases(
@@ -261,12 +304,12 @@ export default function inlineSkillIdentifier(pi: ExtensionAPI): void {
       return { action: "continue" };
     }
 
-    const names = referencedSkills(event.text, new Set(getSkillNames(pi)));
+    const rewritten = rewriteSkillAliasInput(
+      event.text,
+      new Set(getSkillNames(pi)),
+    );
+    if (!rewritten) return { action: "continue" };
 
-    // Keep the layer intentionally narrow. Multiple skills can be handled later,
-    // but only if Pi exposes a native composition path.
-    if (names.length !== 1) return { action: "continue" };
-
-    return { action: "transform", text: `/skill:${names[0]} ${event.text}` };
+    return { action: "transform", text: rewritten };
   });
 }

@@ -1,5 +1,8 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { copyToClipboard, resumeCommand } from "../../lib/session-resume.ts";
+import {
+  copyToClipboard,
+  type ExtensionAPI,
+} from "@earendil-works/pi-coding-agent";
+import { resumeCommand } from "../../lib/session-resume.ts";
 
 /**
  * /continue
@@ -27,7 +30,10 @@ export default function (pi: ExtensionAPI) {
       }
 
       const resumeCmd = resumeCommand(sm.getCwd(), sm.getSessionId());
-      const copied = copyToClipboard(resumeCmd);
+      const copied = await copyToClipboard(resumeCmd).then(
+        () => true,
+        () => false,
+      );
 
       ctx.ui.notify(
         copied

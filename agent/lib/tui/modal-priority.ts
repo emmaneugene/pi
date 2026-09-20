@@ -1,4 +1,4 @@
-/** Coordinates command overlays with tool-driven modal UI. */
+/** Holds tool-driven modal UI until command pickers close. */
 
 interface Waiter {
   resolve(ready: boolean): void;
@@ -6,10 +6,7 @@ interface Waiter {
   onAbort?: () => void;
 }
 
-/**
- * Tracks command overlays that must finish before tool-driven modal UI mounts.
- * Nested overlays share one active period and release all waiters at the end.
- */
+/** Nested pickers share one active period and release waiters together. */
 export class ModalPriority {
   private active = 0;
   private readonly waiters = new Set<Waiter>();
@@ -24,7 +21,7 @@ export class ModalPriority {
     }
   }
 
-  /** Returns false if the caller is aborted before command overlays close. */
+  /** False if aborted before pickers close. */
   wait(signal?: AbortSignal): Promise<boolean> {
     if (signal?.aborted) return Promise.resolve(false);
     if (this.active === 0) return Promise.resolve(true);
@@ -53,5 +50,4 @@ export class ModalPriority {
   }
 }
 
-/** Shared coordination point for all local extensions. */
 export const modalPriority = new ModalPriority();

@@ -2,7 +2,7 @@
 
 Editable prompt queue, steer control, and prompt history manager for the Pi coding agent.
 
-This extension vendors [`@onurpi/prompt-queue`](https://github.com/osolmaz/onurpi/tree/a08b31aae8a549b8fd8f0d02662a593485adcc7a/packages/prompt-queue) at commit `a08b31aae8a549b8fd8f0d02662a593485adcc7a`.
+This extension vendors [`@onurpi/prompt-queue`](https://github.com/osolmaz/onurpi/tree/a08b31aae8a549b8fd8f0d02662a593485adcc7a/packages/prompt-queue) at commit `a08b31aae8a549b8fd8f0d02662a593485adcc7a`. Send-now ([`12f90846`](https://github.com/osolmaz/onurpi/commit/12f90846e91b)) and error-hold ([`a4b55010`](https://github.com/osolmaz/onurpi/commit/a4b550103d5f)) are ported locally because this tree diverged after the vendor.
 
 While the agent is running, the extension captures new prompts into its own queue instead of letting
 Pi deliver them immediately. Queued items are shown in a list above the prompt editor and can be
@@ -25,9 +25,16 @@ never queued.
 - Steering items are injected at the next turn boundary, before the next LLM call.
 - Queued follow-ups are sent one at a time whenever the agent settles.
 - Delivery pauses while the manager window is open.
-- Aborting a run (`Esc`) holds the queue so a stopped run is never restarted silently. Resume it
-  explicitly with `r` in the manager window or `/queue resume`, or implicitly by submitting or
-  queuing a new prompt. Just opening and closing the manager does not resume.
+- `s` in the manager sends the selected prompt immediately. If the agent is running, it aborts the
+  active run and continues with the selected prompt; remaining queued items keep their delivery
+  state.
+- Aborting a run (`Esc`) holds the queue so a stopped run is never restarted silently.
+- If the agent ends with an error, delivery pauses after Pi exhausts its automatic retries. A retry
+  that eventually succeeds continues normal queue delivery. The failed in-flight prompt remains in
+  session history and is not automatically requeued, avoiding duplicate work after an ambiguous
+  provider failure.
+- Resume held delivery explicitly with `r` in the manager window or `/queue resume`, or implicitly
+  by submitting or queuing a new prompt. Just opening and closing the manager does not resume.
 
 ## Manager window
 
@@ -36,14 +43,15 @@ session prompt history. It opens on the queue tab when anything is pending, othe
 tab, and jumps to history when the last queue item is deleted.
 
 ```text
-↑↓ move · ⇥ switch tab · enter to editor · e edit · s steer/queue · x delete · p/n reorder · r resume · esc close
+↑↓ move · ⇥ switch tab · enter to editor · e edit · m mode · s send now · d delete · p/n reorder · r resume · esc close
 ```
 
 - `Tab`, `Left`, or `Right` switches between the queue and history tabs.
 - `Enter` inserts the selected text into the prompt editor (queue items are removed from the queue).
 - `e` opens Pi's editor dialog to edit the selected queue item or history entry in place.
-- `s` toggles the selected queue item between queued and steering delivery.
-- `x` deletes the selected item.
+- `m` toggles the selected queue item between queued and steering delivery.
+- `s` sends the selected queue or history prompt now, interrupting an active run before continuing.
+- `d` deletes the selected item.
 - `p` / `n` move a queue item earlier or later. History entries cannot be reordered.
 - `r` closes the window and resumes delivery after an interrupt.
 

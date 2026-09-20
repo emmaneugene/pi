@@ -1,20 +1,10 @@
 /**
- * Reusable, resume-style catalog browser.
+ * Filterable catalog picker. Replaces the prompt editor (not a floating
+ * overlay) so terminal images cannot cover it. Writes nothing to the session.
  *
- * A filterable picker: a search box, a fuzzy filter, a windowed scroll, and
- * columns. It builds on pi-tui's `SelectList` and wraps it in
- * `ctx.ui.custom()` inside a solid black-backed bordered box, so it stands
- * out from the chat behind it.
- *
- * This picker is an ephemeral overlay, so it writes nothing to the session.
- * Catalogs never leak into the exported history.
- *
- * Selecting a row opens that entry's full artefact in the editor, unless the
- * caller supplies a custom selection action. Even with a custom action, the
- * configured external-editor key still opens the artefact:
- *   - $EDITOR / $VISUAL set → open directly in the external editor (a real
- *     file path when the artefact is a file, otherwise a temp file).
- *   - neither set → fall back to pi's built-in editor (`ctx.ui.editor`).
+ * Enter opens the row's artefact unless `onSelect` is set. The external-editor
+ * key still opens the artefact: `$EDITOR` / `$VISUAL` when set, else
+ * `ctx.ui.editor`.
  */
 
 import { spawn } from "node:child_process";
@@ -38,36 +28,24 @@ import {
 import { modalPriority } from "./modal-priority.ts";
 
 export type CatalogArtifact =
-  /** A real file (e.g. a SKILL.md); $EDITOR opens it in place. */
   | { kind: "file"; path: string }
-  /** Generated text; `ext` names the temp file written for $EDITOR. */
   | { kind: "text"; content: string; ext?: string };
 
 export interface CatalogEntry {
-  /** Row shown in the picker (label = primary column, description = rest). */
   item: SelectItem;
-  /** Resolve the artefact to open when this row is selected. */
   artifact: () => CatalogArtifact;
 }
 
-/** Result of a ctrl+x action: an optional toast to show afterward. */
 export interface KillResult {
   message?: string;
   type?: "info" | "warning" | "error";
 }
 
 export interface CatalogOptions {
-  /** Max rows visible before scrolling. Defaults to fit the terminal. */
   maxVisible?: number;
-  /** Re-read entries at this interval while the picker is open. */
   refreshIntervalMs?: number;
-  /** Override the default Enter action that opens the entry's artefact. */
   onSelect?: (entry: CatalogEntry) => Promise<void> | void;
-  /**
-   * Optional ctrl+x action on the highlighted entry (e.g. stop a running
-   * subagent). When set, this shows a `ctrl+x stop` hint. After the action
-   * runs, the list refreshes in place so statuses update.
-   */
+  /** ctrl+x on the highlighted row; list refreshes afterward. */
   onKill?: (value: string) => Promise<KillResult | void> | KillResult | void;
 }
 
@@ -78,11 +56,9 @@ type CatalogChoice = {
 
 const BG_RESET = "\x1b[49m";
 
-/** Pinned so SelectList's description-column budget is deterministic. */
 const PRIMARY_COL = 32;
 
-/** Pre-ellipsize descriptions to fit; SelectList otherwise hard-cuts them with
- *  no "…". Mirrors its width math, one column short so our "…" survives. */
+/** SelectList hard-cuts descriptions; leave one column so "…" survives. */
 function ellipsizeDescriptions(
   items: SelectItem[],
   inner: number,
@@ -98,13 +74,11 @@ function ellipsizeDescriptions(
   );
 }
 
-/** Wrap content lines in a solid panel-backed bordered box of the given width. */
 function boxed(content: string[], width: number, theme: any): string[] {
   const BG = theme.getBgAnsi("customMessageBg");
   const inner = Math.max(1, width - 4);
   const bar = theme.fg("border", "│");
-  // Re-assert BG after resets a row may carry (\x1b[0m, \x1b[49m); without this
-  // the fill and right border lose their background from the reset onward.
+  // Rows may reset background; re-assert BG or the fill and right border drop.
   const keepBg = (s: string): string =>
     s
       .replace(/\x1b\[0m/g, `\x1b[0m${BG}`)
@@ -125,10 +99,6 @@ function boxed(content: string[], width: number, theme: any): string[] {
   ];
 }
 
-/**
- * Show a filterable picker and resolve to the chosen item's `value`, or
- * `undefined` if cancelled.
- */
 async function pickFromList(
   ctx: ExtensionContext,
   title: string,
@@ -140,9 +110,9 @@ async function pickFromList(
       let entries = getEntries();
       const maxVisible =
         opts.maxVisible ??
-        Math.max(5, Math.min(entries.length, tui.terminal.rows - 10));
+        Math.max(5, Math.min(entries.length, 14, tui.terminal.rows - 12));
       let query = "";
-      let currentInner = -1; // last render width; -1 forces a rebuild on first render
+      let currentInner = -1;
 
       let settled = false;
       const finish = (result: CatalogChoice | undefined) => {
@@ -150,9 +120,7 @@ async function pickFromList(
         settled = true;
         done(result);
       };
-      // SelectList's own setFilter is a prefix match on `value`. We want
-      // resume-style fuzzy matching on the primary text (the name), so we
-      // filter here and rebuild the list when the query changes.
+      // SelectList.setFilter is prefix-on-value; filter on label instead.
       const visibleItems = (): SelectItem[] => {
         const items = entries.map((e) => e.item);
         return query ? fuzzyFilter(items, query, (i) => i.label) : items;
@@ -172,8 +140,6 @@ async function pickFromList(
         return l;
       };
       let list = makeList(visibleItems());
-      // Rebuild after a filter/data change, optionally keeping the cursor on a
-      // given value (used to keep focus on a just-killed row).
       const rebuild = (preserveValue?: string) => {
         const visible = visibleItems();
         list = makeList(visible);
@@ -198,7 +164,6 @@ async function pickFromList(
           const shown =
             query.length > 0 ? query : theme.fg("dim", "type to filter");
           const inner = Math.max(1, width - 4);
-          // Re-ellipsize to the current width on first render / resize.
           if (inner !== currentInner) {
             currentInner = inner;
             rebuild(list.getSelectedItem()?.value ?? undefined);
@@ -231,7 +196,6 @@ async function pickFromList(
             const sel = list.getSelectedItem();
             if (sel) finish({ value: sel.value, action: "artifact" });
           } else if (opts.onKill && matchesKey(data, "ctrl+x")) {
-            // ctrl+x: run the kill action on the highlighted row, then refresh.
             const sel = list.getSelectedItem();
             if (sel) {
               void (async () => {
@@ -252,7 +216,6 @@ async function pickFromList(
             query += data;
             rebuild();
           } else {
-            // Arrows / enter / escape are owned by SelectList.
             list.handleInput(data);
           }
           tui.requestRender();
@@ -262,18 +225,16 @@ async function pickFromList(
         },
       };
     },
-    { overlay: true, overlayOptions: { width: "92%", maxHeight: "90%" } },
   );
 }
 
-/** Launch the external editor on `file`, suspending the TUI while it runs. */
 function runExternalEditor(
   ctx: ExtensionContext,
   editorCmd: string,
   file: string,
 ): Promise<void> {
   return ctx.ui.custom<void>((tui: TUI, theme, _kb, done) => {
-    // Defer so the overlay mounts before we hand the screen to the editor.
+    // Mount first, then hand the screen to the editor.
     setTimeout(async () => {
       try {
         tui.stop();
@@ -300,7 +261,6 @@ function runExternalEditor(
   });
 }
 
-/** Open an artefact: external $EDITOR if available, else the builtin editor. */
 async function openArtifact(
   ctx: ExtensionContext,
   title: string,
@@ -328,10 +288,7 @@ async function openArtifact(
   }
 }
 
-/**
- * Browse a catalog: filterable picker → select opens the full artefact in the
- * editor → returns to the list. Loops until dismissed. TUI-only.
- */
+/** Filterable picker; select opens the artefact, then returns to the list. */
 export async function showCatalog(
   ctx: ExtensionContext,
   title: string,
@@ -342,8 +299,6 @@ export async function showCatalog(
     ctx.ui.notify(`${title} requires TUI mode`, "error");
     return;
   }
-  // Accept a static array or a getter (the getter lets the list refresh in
-  // place after a ctrl+x action).
   const getEntries =
     typeof entriesArg === "function" ? entriesArg : () => entriesArg;
   if (getEntries().length === 0) {

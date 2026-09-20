@@ -87,7 +87,7 @@ Check the result at its actual point of use: run the check, exercise the behavio
 
 - **“Use camelCase for names.”** Identify the language, affected names, and external contracts. An existing lint rule may fit; do not assume this authorizes renaming public fields.
 - **“Auth expires after 30 minutes of inactivity.”** Distinguish current behavior from a requirement. Check the implementation and tests, including what resets the clock. Unresolved conflicts about duration or expiry conditions require escalation.
-- **“Show me when explaining a large feature.”** Check existing explanation guidance first. If the global prompt already points to `show-me`, another copy of the rule may add no value.
+- **“Show me when explaining a large feature.”** Check existing explanation guidance first. If the global prompt already points to `visualize`, another copy of the rule may add no value.
 - **“Skip subagents for the rest of this session.”** Keep the direction session-scoped. Do not rewrite the global delegation policy.
 - **“Check available models before choosing a subagent model.”** Check the relevant tool descriptions first. Keep tool-specific guidance with the tool instead of duplicating it in the system prompt.
 - **“Preserve this explanation in the project knowledge base through its maintenance workflow.”** Prepare a handoff when another workflow owns information. Do not create a parallel knowledge base.

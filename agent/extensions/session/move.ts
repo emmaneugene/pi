@@ -1,4 +1,7 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import {
+  copyToClipboard,
+  type ExtensionAPI,
+} from "@earendil-works/pi-coding-agent";
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
@@ -10,11 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import {
-  commandExists,
-  copyToClipboard,
-  resumeCommand,
-} from "../../lib/session-resume.ts";
+import { commandExists, resumeCommand } from "../../lib/session-resume.ts";
 import { resolveUserPath } from "../../lib/paths.ts";
 
 /**
@@ -228,7 +227,10 @@ export default function (pi: ExtensionAPI) {
 
       // Put the resume command on the clipboard for a one-paste relaunch.
       const resumeCmd = resumeCommand(targetDir, sessionId);
-      const copied = copyToClipboard(resumeCmd);
+      const copied = await copyToClipboard(resumeCmd).then(
+        () => true,
+        () => false,
+      );
 
       if (!del.ok) {
         ctx.ui.notify(

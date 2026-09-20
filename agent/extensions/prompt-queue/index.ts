@@ -4,9 +4,13 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 
 import {
-  decideIdleDelivery,
+  decideSendNow,
+  decideSettledDelivery,
   decideTurnEndDelivery,
+  turnOutcome,
   type DeliveryGate,
+  type HoldReason,
+  type TurnOutcome,
 } from "./delivery-policy.ts";
 import { PromptHistory } from "./history-model.ts";
 import { ManagerWindow } from "./manager-window.ts";
@@ -22,6 +26,11 @@ import {
 
 const WIDGET_KEY = "onurpi-prompt-queue";
 
+type ManagerOutcome = Extract<
+  ManagerResult,
+  { kind: "close" | "resume" | "send-now" }
+>;
+
 function palette(ctx: ExtensionContext): WidgetPalette {
   const theme = ctx.ui.theme;
   return {
@@ -32,11 +41,14 @@ function palette(ctx: ExtensionContext): WidgetPalette {
 }
 
 /** Runtime state and Pi wiring for the prompt queue extension. */
-class PromptQueueRuntime {
+export class PromptQueueRuntime {
   readonly queue = new PromptQueue();
   readonly history = new PromptHistory();
-  readonly gate: DeliveryGate = { windowOpen: false, held: false };
+  readonly gate: DeliveryGate = { windowOpen: false, holdReason: undefined };
   private ctx: ExtensionContext | undefined;
+  private intentionalAbortPending = false;
+  private sendOnSettle: string | undefined;
+  private latestTurnOutcome: TurnOutcome;
 
   constructor(private readonly pi: ExtensionAPI) {}
 
@@ -57,7 +69,10 @@ class PromptQueueRuntime {
 
   deliverNextWhenIdle(): void {
     if (this.ctx?.isIdle() !== true) return;
-    if (decideIdleDelivery(this.gate, this.snapshot()) !== "deliver-next")
+    if (
+      decideSettledDelivery(this.gate, this.snapshot(), undefined) !==
+      "deliver-next"
+    )
       return;
     const item = this.queue.takeFirst();
     if (item) this.pi.sendUserMessage(item.text);
@@ -68,12 +83,21 @@ class PromptQueueRuntime {
     this.resumeDelivery();
   }
 
+  private sendNow(text: string, ctx: ExtensionContext): void {
+    this.gate.holdReason = undefined;
+    if (decideSendNow(ctx.isIdle()) === "send") {
+      this.pi.sendUserMessage(text);
+      return;
+    }
+    this.intentionalAbortPending = true;
+    this.sendOnSettle = text;
+    ctx.abort();
+  }
+
   onTurnEnd(message: unknown): void {
-    const decision = decideTurnEndDelivery(
-      this.gate,
-      this.snapshot(),
-      assistantStopReason(message),
-    );
+    const outcome = turnOutcome(assistantStopReason(message));
+    this.latestTurnOutcome = outcome;
+    const decision = decideTurnEndDelivery(this.gate, this.snapshot(), outcome);
     if (decision === "deliver-steer") {
       const item = this.queue.takeFirstSteer();
       if (item) this.pi.sendUserMessage(item.text, { deliverAs: "steer" });
@@ -82,23 +106,51 @@ class PromptQueueRuntime {
   }
 
   onSettled(): void {
-    this.deliverNextWhenIdle();
+    const finalOutcome = this.latestTurnOutcome;
+    this.latestTurnOutcome = undefined;
+    if (this.sendOnSettle !== undefined) {
+      const text = this.sendOnSettle;
+      this.sendOnSettle = undefined;
+      this.intentionalAbortPending = false;
+      this.pi.sendUserMessage(text);
+    } else {
+      const decision = decideSettledDelivery(
+        this.gate,
+        this.snapshot(),
+        finalOutcome,
+      );
+      if (decision === "hold-abort") this.holdQueue("abort");
+      else if (decision === "hold-error") this.holdQueue("error");
+      else if (decision === "deliver-next") this.deliverNextWhenIdle();
+    }
     this.updateWidget();
   }
 
-  onAbort(): void {
-    if (this.queue.size === 0 || this.gate.held) return;
-    this.gate.held = true;
+  private holdQueue(reason: HoldReason): void {
+    if (this.queue.size === 0 || this.gate.holdReason !== undefined) return;
+    this.gate.holdReason = reason;
+    const prefix =
+      reason === "error"
+        ? "Prompt queue paused after an agent error"
+        : "Prompt queue paused";
     this.ctx?.ui.notify(
-      `Prompt queue paused (${String(this.queue.size)} pending). ` +
+      `${prefix} (${String(this.queue.size)} pending). ` +
         "Resume with r in the manager (↑), /queue resume, or a new prompt.",
-      "info",
+      reason === "error" ? "warning" : "info",
     );
     this.updateWidget();
   }
 
+  onAbort(): void {
+    if (this.intentionalAbortPending) {
+      this.intentionalAbortPending = false;
+      return;
+    }
+    this.holdQueue("abort");
+  }
+
   onDirectSubmit(): void {
-    this.gate.held = false;
+    this.gate.holdReason = undefined;
     this.updateWidget();
   }
 
@@ -119,17 +171,21 @@ class PromptQueueRuntime {
   private async runManager(
     ctx: ExtensionContext,
     state: ManagerWindowState,
-  ): Promise<"close" | "resume"> {
+  ): Promise<ManagerOutcome> {
     for (;;) {
       const result = await ctx.ui.custom<ManagerResult>(
         (tui, theme, _keybindings, done) =>
           new ManagerWindow(state, tui, theme, done),
       );
-      if (result.kind === "close" || result.kind === "resume")
-        return result.kind;
+      if (
+        result.kind === "close" ||
+        result.kind === "resume" ||
+        result.kind === "send-now"
+      )
+        return result;
       if (result.kind === "insert") {
         ctx.ui.setEditorText(result.text);
-        return "close";
+        return { kind: "close" };
       }
       const edited = await ctx.ui.editor("Edit prompt", result.text);
       if (edited !== undefined && edited.trim().length > 0)
@@ -143,7 +199,7 @@ class PromptQueueRuntime {
     if (ctx?.mode !== "tui" || this.gate.windowOpen) return;
     this.gate.windowOpen = true;
     this.updateWidget();
-    let outcome: "close" | "resume" = "close";
+    let outcome: ManagerOutcome = { kind: "close" };
     try {
       outcome = await this.runManager(
         ctx,
@@ -151,8 +207,9 @@ class PromptQueueRuntime {
       );
     } finally {
       this.gate.windowOpen = false;
-      if (outcome === "resume") this.gate.held = false;
-      this.deliverNextWhenIdle();
+      if (outcome.kind === "resume") this.gate.holdReason = undefined;
+      if (outcome.kind === "send-now") this.sendNow(outcome.text, ctx);
+      else this.deliverNextWhenIdle();
       this.updateWidget();
     }
   }
@@ -162,7 +219,7 @@ class PromptQueueRuntime {
   }
 
   private resumeDelivery(): void {
-    this.gate.held = false;
+    this.gate.holdReason = undefined;
     this.deliverNextWhenIdle();
     this.updateWidget();
   }

@@ -12,29 +12,29 @@ function deferred<T>() {
 }
 
 describe("ModalPriority", () => {
-  it("lets modal UI proceed when no command overlay is active", async () => {
+  it("lets modal UI proceed when no command picker is active", async () => {
     const priority = new ModalPriority();
 
     await expect(priority.wait()).resolves.toBe(true);
   });
 
-  it("holds modal UI until the command overlay closes", async () => {
+  it("holds modal UI until the command picker closes", async () => {
     const priority = new ModalPriority();
-    const overlay = deferred<void>();
-    const run = priority.run(() => overlay.promise);
+    const picker = deferred<void>();
+    const run = priority.run(() => picker.promise);
     const ready = vi.fn();
     const waiting = priority.wait().then(ready);
 
     await Promise.resolve();
     expect(ready).not.toHaveBeenCalled();
 
-    overlay.resolve();
+    picker.resolve();
     await run;
     await waiting;
     expect(ready).toHaveBeenCalledWith(true);
   });
 
-  it("waits for all nested command overlays", async () => {
+  it("waits for all nested command pickers", async () => {
     const priority = new ModalPriority();
     const outer = deferred<void>();
     const inner = deferred<void>();
@@ -54,7 +54,7 @@ describe("ModalPriority", () => {
     expect(ready).toHaveBeenCalledWith(true);
   });
 
-  it("releases the priority after an overlay throws", async () => {
+  it("releases the priority after a picker throws", async () => {
     const priority = new ModalPriority();
 
     await expect(
@@ -67,15 +67,15 @@ describe("ModalPriority", () => {
 
   it("stops waiting when the tool call is aborted", async () => {
     const priority = new ModalPriority();
-    const overlay = deferred<void>();
-    const run = priority.run(() => overlay.promise);
+    const picker = deferred<void>();
+    const run = priority.run(() => picker.promise);
     const controller = new AbortController();
     const waiting = priority.wait(controller.signal);
 
     controller.abort();
 
     await expect(waiting).resolves.toBe(false);
-    overlay.resolve();
+    picker.resolve();
     await run;
   });
 

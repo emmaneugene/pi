@@ -168,7 +168,7 @@ export class SubagentSessionViewer {
   }
 
   render(width: number): string[] {
-    const height = Math.max(8, this.tui.terminal.rows);
+    const height = Math.max(8, this.tui.terminal.rows - 6);
     const composerLines = this.composing ? this.composer.render(width) : [];
     const noticeLines = this.notice
       ? [truncateToWidth(this.theme.fg("muted", this.notice), width, "…")]
@@ -205,8 +205,7 @@ export class SubagentSessionViewer {
       `${icon} ${status} · ${invocationSummary(this.source.invocation)}`,
     );
     const footer = this.theme.fg("dim", `${this.hints()} · ${position}`);
-    // The composer's own lines pass through untouched: Editor embeds a cursor
-    // marker that clipping and padding would corrupt.
+    // Don't clip composer lines: Editor embeds a cursor marker.
     const fit = (line: string): string => {
       const clipped = truncateToWidth(line, width, "…");
       return clipped + " ".repeat(Math.max(0, width - visibleWidth(clipped)));
@@ -289,10 +288,7 @@ export class SubagentSessionViewer {
     this.tui.requestRender();
   }
 
-  /**
-   * Composer keys. Escape closes the composer rather than the viewer, so a
-   * half-typed message cannot be lost to the same key that leaves the screen.
-   */
+  /** Escape closes the composer, not the viewer. */
   private handleComposerInput(data: string): void {
     if (matchesKey(data, "escape")) {
       this.composing = false;
@@ -366,14 +362,6 @@ export async function showSubagentSessionViewer(
   return ctx.ui.custom<ViewerExit>(
     (tui, theme, keybindings, done) =>
       new SubagentSessionViewer(tui, theme, keybindings, source, done),
-    {
-      overlay: true,
-      overlayOptions: {
-        anchor: "top-left",
-        width: "100%",
-        maxHeight: "100%",
-      },
-    },
   );
 }
 

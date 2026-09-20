@@ -4,8 +4,8 @@
  * - catalog.ts: /show-skills viewer.
  * - audit.ts: warns on session start when project and global skills collide.
  * - inline-skill-identifier.ts: $skill aliases in the editor. Vendored from
- *   @pi-kaush/pi-inline-skill-identifier (see its header); kept byte-identical
- *   to upstream so re-vendoring stays a file copy.
+ *   @pi-kaush/pi-inline-skill-identifier (see its header), then locally
+ *   extended so later known `$skill` tokens become `/skill:name`.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import audit from "./audit.ts";

@@ -42,7 +42,7 @@ protocol to distinguish this key from `ctrl+a`.
 ## Commands
 
 - `/toggle-subagents` — toggle subagents on/off. State is saved to `subagents.json` in the pi agent config directory; disabling aborts running children and removes the subagent tools from the active tool set.
-- `/subagents` — list this session's subagents (live + on disk) with status, effective model, thinking level, and setting source. **Enter** opens a full-screen transcript that streams live session events. Use arrow keys or Page Up/Page Down to scroll, End to resume auto-follow, the configured tool-expansion key to toggle tool details, and Escape to return. Use the configured external-editor key from the picker to open the rendered transcript in `$EDITOR` (builtin editor fallback).
+- `/subagents` — list this session's subagents (live + on disk) with status, effective model, thinking level, and setting source. The list and transcript viewer replace the prompt editor. **Enter** opens a transcript that streams live session events. Use arrow keys or Page Up/Page Down to scroll, End to resume auto-follow, the configured tool-expansion key to toggle tool details, and Escape to return. Use the configured external-editor key from the picker to open the rendered transcript in `$EDITOR` (builtin editor fallback).
 - `/show-subagents` — read-only catalog of available subagent types and their config (context, tools, model, thinking, prompt mode).
 
 The `subagent` tool row also shows the selected type, effective model, effective thinking level, and whether each setting came from a tool override, the agent definition, or inherited defaults. `/subagents` rows include completed agent-turn counts; counts for running agents refresh live while the picker is open.
